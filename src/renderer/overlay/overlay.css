@@ -2,19 +2,19 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 #pings, #emotes, #toasts { position: fixed; inset: 0; pointer-events: none; }
 
 /* ---------- wheel ---------- */
-#wheel, #emoteWheel {
+#wheel, #emoteWheel, #actionWheel {
   position: absolute; left: 0; top: 0; width: 600px; height: 600px; margin: -300px 0 0 -300px;
   pointer-events: none; opacity: 0; transform: scale(.85); transition: opacity .12s ease-out, transform .12s ease-out;
 }
-#wheel.open, #emoteWheel.open { opacity: 1; transform: scale(1); }
-#wheel .wedge, #emoteWheel .wedge { transition: fill-opacity .08s; }
-#wheel .icon, #emoteWheel .icon {
+#wheel.open, #emoteWheel.open, #actionWheel.open { opacity: 1; transform: scale(1); }
+#wheel .wedge, #emoteWheel .wedge, #actionWheel .wedge { transition: fill-opacity .08s; }
+#wheel .icon, #emoteWheel .icon, #actionWheel .icon {
   transition: filter .1s, transform .1s; transform-box: fill-box; transform-origin: center;
   filter: grayscale(1) sepia(.75) saturate(1.3) brightness(1.15);
 }
-#wheel .icon.hot, #emoteWheel .icon.hot { filter: none; transform: scale(1.18); }
-#wheel .centerTxt, #emoteWheel .centerTxt { font: 600 15px "Segoe UI", sans-serif; letter-spacing: 1px; fill: #1fa9e0; }
-#wheel .backTxt, #emoteWheel .backTxt { font: 600 9px "Segoe UI", sans-serif; fill: #6c7a7c; letter-spacing: .5px; }
+#wheel .icon.hot, #emoteWheel .icon.hot, #actionWheel .icon.hot { filter: none; transform: scale(1.18); }
+#wheel .centerTxt, #emoteWheel .centerTxt, #actionWheel .centerTxt { font: 600 15px "Segoe UI", sans-serif; letter-spacing: 1px; fill: #1fa9e0; }
+#wheel .backTxt, #emoteWheel .backTxt, #actionWheel .backTxt { font: 600 9px "Segoe UI", sans-serif; fill: #6c7a7c; letter-spacing: .5px; }
 /* Emote art is square: draw it round, like the League emote wheel. It keeps its own colours (only ping icons are tinted
    until hovered), so the hot slice shows by its wedge and the larger icon. */
 #emoteWheel .icon, #emoteWheel .hub { clip-path: circle(50%); }
