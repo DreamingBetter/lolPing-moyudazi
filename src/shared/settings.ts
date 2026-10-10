@@ -1,3 +1,4 @@
+import { DEFAULT_ACTION_WHEEL, normalizeActionWheel, type ActionSlot } from './actions';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from './emoteCatalog';
 import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
@@ -15,8 +16,10 @@ import { isValidWheel } from './wheelLayout';
 
 export type NamedTrigger = 'alt' | 'ctrl' | 'shift' | 'win' | 'capslock' | 'mouse4' | 'mouse5';
 export type TriggerKey = NamedTrigger | { vk: number };
+export type OptionalTriggerKey = TriggerKey | 'off';
 /** The emote key is a trigger key, or 'off': then the emote wheel is off and can't be opened (nor can emote click). */
-export type EmoteTriggerKey = TriggerKey | 'off';
+export type EmoteTriggerKey = OptionalTriggerKey;
+export type ActionTriggerKey = OptionalTriggerKey;
 export const NAMED_TRIGGERS: readonly NamedTrigger[] = ['alt', 'ctrl', 'shift', 'win', 'capslock', 'mouse4', 'mouse5'];
 
 /** Keyboard triggers offered on each platform. macOS can't reliably stop Caps Lock from toggling, so it isn't offered. */
@@ -63,6 +66,10 @@ export interface Settings {
   emoteSound: boolean;
   /** Imported emotes, at most MAX_CUSTOM_EMOTES. Their files live in the data folder. */
   customEmotes: CustomEmote[];
+  /** Held with a click-drag to open the configurable desktop action wheel; 'off' turns it off. */
+  actionTrigger: ActionTriggerKey;
+  /** The action wheel's slots, top (N) then clockwise. */
+  actionWheel: ActionSlot[];
   /** Look for a new version on launch and every few hours. Checking by hand always works. */
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
@@ -73,6 +80,10 @@ export interface Settings {
 export interface Identity {
   name: string;
   color: number;
+}
+
+function cloneActionSlots(wheel: readonly ActionSlot[]): ActionSlot[] {
+  return wheel.map((a) => ({ ...a, params: a.params ? { ...a.params } : undefined }));
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -105,6 +116,8 @@ export const DEFAULT_SETTINGS: Settings = {
   emoteSizePx: 150,
   emoteSound: true,
   customEmotes: [],
+  actionTrigger: 'win',
+  actionWheel: cloneActionSlots(DEFAULT_ACTION_WHEEL),
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
 };
@@ -143,15 +156,22 @@ function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): Tri
 
 const trigger = (raw: unknown, platform: Platform): TriggerKey => triggerKey(raw, platform, DEFAULT_SETTINGS.trigger);
 
+/** An optional wheel key as stored, before the clash rules: 'off', or a trigger key with a per-wheel fallback. */
+const optionalTriggerKey = (raw: unknown, platform: Platform, fallback: TriggerKey): OptionalTriggerKey =>
+  (raw === 'off' ? 'off' : triggerKey(raw, platform, fallback));
+
 /** The emote key as stored, before the clash rules: 'off', or a trigger key with Ctrl as the fallback. */
-const emoteKey = (raw: unknown, platform: Platform): EmoteTriggerKey => (raw === 'off' ? 'off' : triggerKey(raw, platform, 'ctrl'));
+const emoteKey = (raw: unknown, platform: Platform): EmoteTriggerKey => optionalTriggerKey(raw, platform, 'ctrl');
+
+/** The action key as stored, before the clash rules: 'off', or a trigger key with Win as the fallback. */
+const actionKey = (raw: unknown, platform: Platform): ActionTriggerKey => optionalTriggerKey(raw, platform, 'win');
 
 /** The Caps Lock key's code: the named 'capslock' trigger and a custom { vk: 0x14 } are one physical key. */
 const CAPS_LOCK_VK = 0x14;
 /** The key code a trigger stands for when it is a custom key or Caps Lock; null for every other trigger. */
-export const triggerVk = (t: EmoteTriggerKey): number | null => (typeof t === 'object' ? t.vk : t === 'capslock' ? CAPS_LOCK_VK : null);
+export const triggerVk = (t: OptionalTriggerKey): number | null => (typeof t === 'object' ? t.vk : t === 'capslock' ? CAPS_LOCK_VK : null);
 
-export function sameTrigger(a: EmoteTriggerKey, b: EmoteTriggerKey): boolean {
+export function sameTrigger(a: OptionalTriggerKey, b: OptionalTriggerKey): boolean {
   const x = triggerVk(a);
   const y = triggerVk(b);
   return x !== null && y !== null ? x === y : a === b;
@@ -164,10 +184,29 @@ export function triggersClash(ping: TriggerKey, emote: EmoteTriggerKey, toggle: 
   return sameTrigger(ping, emote) || (vk !== null && vk === toggle.vk);
 }
 
+export function wheelTriggersClash(ping: TriggerKey, emote: EmoteTriggerKey, action: ActionTriggerKey, toggle: Hotkey): boolean {
+  const enabled = [ping, emote, action].filter((t): t is TriggerKey => t !== 'off');
+  for (let i = 0; i < enabled.length; i += 1) {
+    for (let j = i + 1; j < enabled.length; j += 1) {
+      if (sameTrigger(enabled[i], enabled[j])) return true;
+    }
+  }
+  return enabled.some((t) => {
+    const vk = triggerVk(t);
+    return vk !== null && vk === toggle.vk;
+  });
+}
+
 /** Whether applying `patch` to `current` leaves those three keys clashing, judged as normalizeSettings will read them. */
 export function patchClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
-  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey'>(k: K): unknown => (k in patch ? patch[k] : current[k]);
-  return triggersClash(trigger(pick('trigger'), platform), emoteKey(pick('emoteTrigger'), platform), hotkey(pick('toggleHotkey')));
+  const pick = <K extends 'trigger' | 'emoteTrigger' | 'actionTrigger' | 'toggleHotkey'>(k: K): unknown =>
+    (k in patch ? patch[k] : current[k]);
+  return wheelTriggersClash(
+    trigger(pick('trigger'), platform),
+    emoteKey(pick('emoteTrigger'), platform),
+    actionKey(pick('actionTrigger'), platform),
+    hotkey(pick('toggleHotkey')),
+  );
 }
 
 function hotkey(raw: unknown): Hotkey {
@@ -211,6 +250,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
   const pingTrigger = trigger(r.trigger, platform);
   const toggleHotkey = hotkey(r.toggleHotkey);
   const emote = emoteKey(r.emoteTrigger, platform);
+  const normalizedEmote = triggersClash(pingTrigger, emote, toggleHotkey) ? 'off' : emote;
+  const action = actionKey(r.actionTrigger, platform);
   const custom = customEmotes(r.customEmotes);
   return {
     version: 1,
@@ -235,13 +276,15 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),
     roomMuted: bool(r.roomMuted, 'roomMuted'),
-    emoteTrigger: triggersClash(pingTrigger, emote, toggleHotkey) ? 'off' : emote,
+    emoteTrigger: normalizedEmote,
     emoteClick: bool(r.emoteClick, 'emoteClick'),
     emoteWheel: normalizeEmoteWheel(r.emoteWheel, custom),
     clickEmoteId: normalizeClickEmote(r.clickEmoteId, custom),
     emoteSizePx: num(r.emoteSizePx, 'emoteSizePx'),
     emoteSound: bool(r.emoteSound, 'emoteSound'),
     customEmotes: custom,
+    actionTrigger: wheelTriggersClash(pingTrigger, normalizedEmote, action, toggleHotkey) ? 'off' : action,
+    actionWheel: normalizeActionWheel(r.actionWheel),
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
   };
@@ -278,6 +321,7 @@ export type OverlaySettings = Pick<
   Settings,
   'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
+  | 'actionWheel'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
@@ -285,4 +329,5 @@ export const overlaySettings = (s: Settings): OverlaySettings => ({
   wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),
+  actionWheel: cloneActionSlots(s.actionWheel),
 });
