@@ -53,6 +53,16 @@ describe('InputBridge', () => {
     await echoed;
   });
 
+  it('sends helper key injection commands', async () => {
+    const b = bridge('echo');
+    const running = waitFor<string>(b, 'status', (s) => s === 'running');
+    b.start();
+    await running;
+    const echoed = waitFor<HelperEvent>(b, 'event', (e) => e.type === 'error' && e.message === 'got:injectKeys');
+    b.injectKeys([0x5b, 0x10, 0x53]);
+    await echoed;
+  });
+
   it('restarts a crashing helper and gives up after three crashes', async () => {
     const b = bridge('crash');
     const failed = waitFor<string>(b, 'status', (s) => s === 'failed');

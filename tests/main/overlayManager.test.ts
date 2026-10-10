@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmoteArt } from '../../src/shared/emotes';
-import { OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
+import { OVERLAY_ACTIONED, OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
 const h = vi.hoisted(() => ({
@@ -89,6 +89,34 @@ describe('OverlayManager wheels', () => {
       ['wheel:open', { x: 5, y: 5, wheel: 'ping' }],
       ['wheel:move', { x: 6, y: 6, wheel: 'ping' }],
     ]);
+  });
+
+  it('forwards action wheel events and emits action reports', () => {
+    const action = vi.fn();
+    const sender = (i: number): unknown => h.windows[i].webContents;
+    mgr.on('action', action);
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'action' });
+    mgr.handle({ type: 'wheelMove', x: 110, y: 210, wheel: 'action' });
+    mgr.handle({ type: 'wheelRelease', x: 120, y: 220, wheel: 'action' });
+    expect(sent(0)).toEqual([
+      ['wheel:open', { x: 100, y: 200, wheel: 'action' }],
+      ['wheel:move', { x: 110, y: 210, wheel: 'action' }],
+      ['wheel:release', { x: 120, y: 220, wheel: 'action' }],
+    ]);
+    h.handlers.get(OVERLAY_ACTIONED)!({ sender: sender(0) }, { id: 'action-0-screenshot', x: 10, y: 20 });
+    expect(action).toHaveBeenCalledWith({ id: 'action-0-screenshot', displayId: 1, x: 10, y: 20 });
+  });
+
+  it('ignores malformed action reports', () => {
+    const action = vi.fn();
+    const sender = (i: number): unknown => h.windows[i].webContents;
+    mgr.on('action', action);
+    const report = h.handlers.get(OVERLAY_ACTIONED)!;
+    for (const raw of [null, {}, { id: '', x: 1, y: 2 }, { id: 'a', x: '1', y: 2 }, { id: 'a', x: 1, y: Number.NaN }]) {
+      report({ sender: sender(0) }, raw);
+    }
+    report({ sender: {} }, { id: 'a', x: 1, y: 2 });
+    expect(action).not.toHaveBeenCalled();
   });
 });
 

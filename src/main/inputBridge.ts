@@ -66,6 +66,11 @@ export class InputBridge extends EventEmitter {
     this.write(cmd);
   }
 
+  injectKeys(keys: number[]): void {
+    const valid = keys.filter((k) => Number.isInteger(k) && k >= 1 && k <= 254);
+    if (valid.length === keys.length && valid.length > 0 && valid.length <= 6) this.write({ type: 'injectKeys', keys: valid });
+  }
+
   /** Manual restart after the bridge gave up. */
   retry(): void {
     this.policy.reset();
