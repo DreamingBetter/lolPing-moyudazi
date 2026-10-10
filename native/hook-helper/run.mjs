@@ -15,7 +15,8 @@ if (action !== 'build' && action !== 'test') {
   console.error('usage: node native/hook-helper/run.mjs build|test');
   process.exit(2);
 }
-// The explicit .\ matters: cmd may be set to not search the current directory for commands.
-if (win) run('cmd.exe', ['/d', '/e:on', '/c', 'call .\\build.cmd']);
+// npm launches scripts through `cmd /s` on Windows, which can confuse nested `for /F ('...')`
+// calls inside Visual Studio's vcvars scripts on some machines. PowerShell starts this batch cleanly.
+if (win) run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '& .\\build.cmd']);
 else run('sh', ['build.sh']);
 if (action === 'test') run(join(here, 'build', win ? 'helper_tests.exe' : 'helper_tests'), []);
