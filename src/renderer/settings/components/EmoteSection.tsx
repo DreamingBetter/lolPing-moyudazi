@@ -142,7 +142,7 @@ export function EmoteSection({ settings: s, update, lengthUnit }: { settings: Se
             {custom ? <span className="desc">{t.customKeyNote}</span> : null}
           </>
         )}>
-        <TriggerPicker value={s.emoteTrigger} offOption blocked={s.trigger}
+        <TriggerPicker value={s.emoteTrigger} offOption blockedList={[s.trigger, s.actionTrigger]}
           onChange={(k) => void update({ emoteTrigger: k }).then((r) => setKeyError(r.ok ? null : r.error))} />
       </SettingRow>
       {keyError ? <div className="rowError" role="alert">{keyError}</div> : null}
