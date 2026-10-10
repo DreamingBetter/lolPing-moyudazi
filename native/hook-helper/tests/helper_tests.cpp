@@ -28,7 +28,7 @@ static int g_fail = 0;
   } while (0)
 
 namespace {
-constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56, KEY_T = 0x54;
+constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, WIN = 0x5B, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56, KEY_T = 0x54;
 using S = Decision::State;
 
 InputEvent key(EvKind k, uint32_t vk) {
@@ -74,6 +74,15 @@ Decision withEmote(Trigger emote = Trigger::Ctrl, uint32_t vk = 0, bool emoteCli
   c.emoteTrigger = emote;
   c.emoteTriggerVk = vk;
   c.emoteClick = emoteClick;
+  Decision d;
+  d.setConfig(c);
+  return d;
+}
+Decision withAction(Trigger action = Trigger::Win, uint32_t vk = 0) {
+  Config c;
+  c.emoteTrigger = Trigger::Ctrl;
+  c.actionTrigger = action;
+  c.actionTriggerVk = vk;
   Decision d;
   d.setConfig(c);
   return d;
@@ -475,6 +484,35 @@ static void test_alt_drag_is_still_the_ping_wheel() {
   CHECK(d.state() == S::Idle);
 }
 
+static void test_win_drag_opens_action_wheel() {
+  Decision d = withAction();
+  CHECK(!d.onEvent(kd(WIN)).swallow);
+  CHECK(d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  Result r = d.onEvent(mv(130, 100));
+  CHECK(emitIs(findEmit(r, Emit::Kind::WheelOpen), WheelKind::Action));
+  CHECK(emitIs(findEmit(r, Emit::Kind::WheelMove), WheelKind::Action));
+  r = d.onEvent(mu(Btn::Left, 140, 90));
+  CHECK(r.swallow);
+  CHECK(emitIs(findEmit(r, Emit::Kind::WheelRelease), WheelKind::Action));
+}
+
+static void test_three_triggers_held_pass_through() {
+  Decision d = withAction();
+  d.onEvent(kd(ALT));
+  d.onEvent(kd(CTRL));
+  d.onEvent(kd(WIN));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow && r.emits.empty() && r.injects.empty());
+}
+
+static void test_action_trigger_none_ignores_win_drag() {
+  Decision d = withAction(Trigger::None);
+  d.onEvent(kd(WIN));
+  CHECK(!d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  CHECK(d.onEvent(mv(150, 100)).emits.empty());
+  CHECK(!d.onEvent(mu(Btn::Left, 150, 100)).swallow);
+}
+
 static void test_both_triggers_held_pass_through() {
   Decision d = withEmote();
   d.onEvent(kd(ALT));
@@ -669,6 +707,21 @@ static void test_parse_config_emote_fields() {
   CHECK(parseCommand(R"({"type":"config","trigger":"off"})", cur).kind == Command::Kind::Invalid);  // pings always have a trigger
 }
 
+static void test_parse_config_action_fields_and_inject_keys() {
+  const Config cur;
+  Command c = parseCommand(R"({"type":"config","actionTrigger":"win","actionTriggerVk":0})", cur);
+  CHECK(c.kind == Command::Kind::Config && c.config.actionTrigger == Trigger::Win);
+  c = parseCommand(R"({"type":"config","actionTrigger":"off"})", cur);
+  CHECK(c.kind == Command::Kind::Config && c.config.actionTrigger == Trigger::None);
+  c = parseCommand(R"({"type":"injectKeys","keys":"91,16,83"})", cur);
+  CHECK(c.kind == Command::Kind::InjectKeys);
+  CHECK(c.injects.size() == 6);
+  CHECK(injectIs(c.injects[0], InjectKind::KeyDown, Btn::None, 91));
+  CHECK(injectIs(c.injects[2], InjectKind::KeyDown, Btn::None, 83));
+  CHECK(injectIs(c.injects[3], InjectKind::KeyUp, Btn::None, 83));
+  CHECK(injectIs(c.injects[5], InjectKind::KeyUp, Btn::None, 91));
+}
+
 static void test_json_parses_flat_objects() {
   std::map<std::string, std::string> m;
   CHECK(parseFlatJson(R"({"type":"config","enabled":true,"dragThresholdPx":8,"trigger":"alt"})", m));
@@ -713,6 +766,8 @@ static void test_format_emit_includes_wheel() {
   CHECK(formatEmit(click) == R"({"type":"click","x":3,"y":4,"wheel":"ping"})");
   click.wheel = WheelKind::Emote;
   CHECK(formatEmit(click) == R"({"type":"click","x":3,"y":4,"wheel":"emote"})");
+  click.wheel = WheelKind::Action;
+  CHECK(formatEmit(click) == R"({"type":"click","x":3,"y":4,"wheel":"action"})");
   for (const auto k : {Emit::Kind::WheelMove, Emit::Kind::WheelRelease}) {
     Emit e{k};
     e.wheel = WheelKind::Emote;
@@ -823,6 +878,7 @@ int main() {
   test_format_emit();
   test_format_emit_includes_wheel();
   test_parse_config_emote_fields();
+  test_parse_config_action_fields_and_inject_keys();
   test_output_never_blocks_producer();
   test_alt_drag_opens_wheel_and_releases();
   test_plain_click_passes_through();
@@ -858,6 +914,9 @@ int main() {
   test_mouse4_trigger_drags_with_side_button();
   test_ctrl_drag_opens_emote_wheel();
   test_alt_drag_is_still_the_ping_wheel();
+  test_win_drag_opens_action_wheel();
+  test_three_triggers_held_pass_through();
+  test_action_trigger_none_ignores_win_drag();
   test_both_triggers_held_pass_through();
   test_emote_click_on_and_off();
   test_escape_and_right_click_cancel_emote_gesture();

@@ -6,8 +6,9 @@ namespace lp {
 
 std::string formatEmit(const Emit& e) {
   auto pt = [&](const char* type) {
+    const char* wheel = e.wheel == WheelKind::Action ? "action" : e.wheel == WheelKind::Emote ? "emote" : "ping";
     return std::string("{\"type\":\"") + type + "\",\"x\":" + std::to_string(e.x) + ",\"y\":" + std::to_string(e.y) +
-           ",\"wheel\":\"" + (e.wheel == WheelKind::Emote ? "emote" : "ping") + "\"}";
+           ",\"wheel\":\"" + wheel + "\"}";
   };
   switch (e.kind) {
     case Emit::Kind::WheelOpen: return pt("wheelOpen");
