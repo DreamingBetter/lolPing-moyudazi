@@ -1,7 +1,7 @@
 import { Button } from '@fluentui/react-components';
 import { DismissRegular } from '@fluentui/react-icons';
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { dropPatch, type WheelPatch, type WheelSource, type WheelTarget } from '../../../shared/wheelLayout';
+import { clickTargetSelection, dropPatch, type WheelPatch, type WheelSource, type WheelTarget } from '../../../shared/wheelLayout';
 import { useText } from '../text';
 
 // Geometry of the editor wheel, in CSS pixels.
@@ -39,6 +39,9 @@ interface Props<T extends string> {
   poolExtra?: ReactNode;
   /** Files dragged in from outside and dropped on the pool. Without it the pool takes no files. */
   onDropFiles?: (files: File[]) => void;
+  /** Called when a wheel slot or centre is clicked for selection rather than as the drop target of a picked item. */
+  onSelectTarget?: (id: T, target: WheelTarget) => void;
+  showCenter?: boolean;
   onChange: (patch: WheelPatch<T>) => void;
   onPreview: (id: T) => void;
 }
@@ -51,7 +54,7 @@ const activate = (fn: () => void) => (e: KeyboardEvent) => {
 };
 
 export function WheelEditor<T extends string>({
-  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onChange, onPreview,
+  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onSelectTarget, showCenter = true, onChange, onPreview,
 }: Props<T>) {
   const t = useText();
   const [picked, setPicked] = useState<WheelSource<T> | null>(null);
@@ -75,6 +78,8 @@ export function WheelEditor<T extends string>({
 
   /** Click on a slot or the centre: place the picked item there, or pick up what's there. */
   const clickTarget = (target: WheelTarget, here: WheelSource<T>) => {
+    const selected = clickTargetSelection(picked, here);
+    if (selected !== null) onSelectTarget?.(selected, target);
     if (picked) apply(picked, target);
     else setPicked(here);
   };
@@ -170,15 +175,17 @@ export function WheelEditor<T extends string>({
               </div>
             );
           })}
-          <div role="button" tabIndex={0} aria-label={t.wheelCenterLabel(trigger, name(center))}
-            title={t.wheelCenterLabel(trigger, name(center))}
-            className={`weCenter${hot === 'center' ? ' hot' : ''}${centerOn ? '' : ' off'}${isPicked((p) => p.from === 'center')}`}
-            {...dragProps({ from: 'center', id: center })} {...dropProps('center')}
-            onClick={() => clickTarget('center', { from: 'center', id: center })}
-            onKeyDown={activate(() => clickTarget('center', { from: 'center', id: center }))}>
-            <img src={icon(center)} alt="" />
-            <span>{t.wheelCenter}</span>
-          </div>
+          {showCenter ? (
+            <div role="button" tabIndex={0} aria-label={t.wheelCenterLabel(trigger, name(center))}
+              title={t.wheelCenterLabel(trigger, name(center))}
+              className={`weCenter${hot === 'center' ? ' hot' : ''}${centerOn ? '' : ' off'}${isPicked((p) => p.from === 'center')}`}
+              {...dragProps({ from: 'center', id: center })} {...dropProps('center')}
+              onClick={() => clickTarget('center', { from: 'center', id: center })}
+              onKeyDown={activate(() => clickTarget('center', { from: 'center', id: center }))}>
+              <img src={icon(center)} alt="" />
+              <span>{t.wheelCenter}</span>
+            </div>
+          ) : null}
         </div>
         <div className={`wePool${filesOver ? ' filesOver' : ''}`} {...fileDropProps}>
           <div className="wePoolTitle">{labels.poolTitle}</div>

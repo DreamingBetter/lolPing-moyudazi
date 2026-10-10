@@ -84,6 +84,8 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
         defaults={{ wheel: DEFAULT_ACTION_WHEEL.map((a) => a.id), center: DEFAULT_ACTION_WHEEL[0].id }}
         labels={{ title: t.actionWheelTitle, desc: t.actionWheelDesc(key), poolTitle: t.actionLibrary, poolDesc: t.actionLibraryDesc }}
         onChange={(patch) => void update(patchForDrop(s.actionWheel, patch))}
+        onSelectTarget={(id) => setSelected(id)}
+        showCenter={false}
         onPreview={(id) => setSelected(id)}
       />
       {selectedSlot ? (

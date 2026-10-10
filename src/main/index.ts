@@ -275,6 +275,7 @@ function start(): void {
     }
     void executeAction(slot, {
       platform: PLATFORM,
+      openDefaultBrowser: () => shell.openExternal('about:blank'),
       openExternal: (url) => shell.openExternal(url),
       openPath: (path) => shell.openPath(path),
       run: runDetached,

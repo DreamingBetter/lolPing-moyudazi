@@ -9,6 +9,7 @@ let deps: ActionExecutorDeps;
 beforeEach(() => {
   deps = {
     platform: 'win',
+    openDefaultBrowser: vi.fn(async () => undefined),
     openExternal: vi.fn(async () => undefined),
     openPath: vi.fn(async () => ''),
     run: vi.fn(async () => undefined),
@@ -26,6 +27,12 @@ describe('executeAction', () => {
     expect(deps.openExternal).toHaveBeenCalledWith('https://example.com/');
     await expect(executeAction(slot('openUrl', { url: 'file:///C:/Windows/System32/calc.exe' }), deps))
       .resolves.toEqual({ ok: false, reason: 'invalidUrl' });
+  });
+
+  it('opens the default browser without opening a fixed website', async () => {
+    await expect(executeAction(slot('openBrowser'), deps)).resolves.toEqual({ ok: true });
+    expect(deps.openDefaultBrowser).toHaveBeenCalledTimes(1);
+    expect(deps.openExternal).not.toHaveBeenCalled();
   });
 
   it('reports missing config for parameterized actions', async () => {

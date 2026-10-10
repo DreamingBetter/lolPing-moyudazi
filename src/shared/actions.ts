@@ -98,7 +98,14 @@ export function normalizeActionWheel(raw: unknown): ActionSlot[] {
       seen.add(slot.id);
       return slot;
     }
-    const fixed = { ...slot, id: `action-${i}-${slot.kind}` };
+    const base = `action-${i}-${slot.kind}`;
+    let id = base;
+    let n = 1;
+    while (seen.has(id)) {
+      id = `${base}-${n}`;
+      n += 1;
+    }
+    const fixed = { ...slot, id };
     seen.add(fixed.id);
     return fixed;
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_WHEEL, type PingId } from '../../src/shared/pings';
-import { dropPatch, isValidWheel, placeOnSlot, swapSlots } from '../../src/shared/wheelLayout';
+import { clickTargetSelection, dropPatch, isValidWheel, placeOnSlot, swapSlots } from '../../src/shared/wheelLayout';
 
 const W = [...DEFAULT_WHEEL];
 
@@ -96,6 +96,20 @@ describe('dropPatch', () => {
     expect(dropPatch(W, 'generic', { from: 'pool', id: 'omw' }, 2)).toBeNull();
     expect(dropPatch(W, 'generic', { from: 'pool', id: 'generic' }, 'center')).toBeNull();
     expect(dropPatch(W, 'generic', { from: 'center', id: 'generic' }, 'center')).toBeNull();
+  });
+});
+
+describe('clickTargetSelection', () => {
+  it('selects a clicked slot when no item is picked up', () => {
+    expect(clickTargetSelection(null, { from: 'slot', id: 'push', slot: 1 })).toBe('push');
+  });
+
+  it('selects the clicked centre when no item is picked up', () => {
+    expect(clickTargetSelection(null, { from: 'center', id: 'generic' })).toBe('generic');
+  });
+
+  it('does not change selection while a picked item is being placed', () => {
+    expect(clickTargetSelection({ from: 'pool', id: 'bait' }, { from: 'slot', id: 'push', slot: 1 })).toBeNull();
   });
 });
 

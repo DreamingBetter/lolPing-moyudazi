@@ -6,6 +6,7 @@ export type ActionResult = { ok: true } | { ok: false; reason: ActionFailureReas
 
 export interface ActionExecutorDeps {
   platform: Platform;
+  openDefaultBrowser(): Promise<void>;
   openExternal(url: string): Promise<void>;
   openPath(path: string): Promise<string>;
   run(command: string, args: string[]): Promise<void>;
@@ -69,7 +70,7 @@ export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps):
       deps.injectKeys([0xae]);
       return { ok: true };
     case 'openBrowser':
-      await deps.openExternal('https://www.google.com/');
+      await deps.openDefaultBrowser();
       return { ok: true };
     case 'openUrl': {
       const raw = urlParam(slot);
