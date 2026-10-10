@@ -322,6 +322,7 @@ function start(): void {
     problems: [
       ...store.problems,
       ...(store.emoteKeyClashed ? [text().problemEmoteKeyClash] : []),
+      ...(store.actionKeyClashed ? [text().problemActionKeyClash] : []),
       ...[...overlays.missingAssets].map((a) => text().missingAsset(a)),
     ],
     limitations: text().limitations,

@@ -69,6 +69,16 @@ describe('settings IPC', () => {
     expect(await call(SETTINGS_CH.set, null)).toMatchObject({ ok: true, settings: { volume: store.get().volume } });
   });
 
+  it('setSettings explains wheel key clashes with the shared trigger rule', async () => {
+    const result = await call(SETTINGS_CH.set, { actionTrigger: 'alt' });
+    expect(result).toMatchObject({
+      ok: false,
+      error: 'The ping trigger, emote key and action key must be different, and custom wheel keys cannot be the pause shortcut key.',
+      settings: { actionTrigger: 'win' },
+    });
+    expect(store.get().actionTrigger).toBe('win');
+  });
+
   it('imports an emote: the files are saved and the entry is added', async () => {
     const s = still(1);
     expect(await call(SETTINGS_CH.emoteImport, { name: 'cat', still: s })).toEqual({ ok: true, id: idOf(s) });

@@ -83,6 +83,35 @@ describe('SettingsStore', () => {
     expect(store.emoteKeyClashed).toBe(true);
   });
 
+  it('flags an action key clash from a hand-edited file', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ trigger: 'shift', emoteTrigger: 'ctrl', actionTrigger: 'shift' }));
+    const store = new SettingsStore(dir);
+    expect(store.load().actionTrigger).toBe('off');
+    expect(store.actionKeyClashed).toBe(true);
+  });
+
+  it('does not flag an action key filled in for an older file', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ trigger: 'win', emoteTrigger: 'ctrl' }));
+    const store = new SettingsStore(dir);
+    expect(store.load().actionTrigger).toBe('off');
+    expect(store.actionKeyClashed).toBe(false);
+  });
+
+  it('resets action key clash tracking on each load', () => {
+    const dir = tempDir();
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ trigger: 'shift', emoteTrigger: 'ctrl', actionTrigger: 'shift' }));
+    const store = new SettingsStore(dir);
+    store.load();
+    expect(store.actionKeyClashed).toBe(true);
+
+    writeFileSync(file, JSON.stringify({ trigger: 'alt', emoteTrigger: 'ctrl', actionTrigger: 'win' }));
+    store.load();
+    expect(store.actionKeyClashed).toBe(false);
+  });
+
   it('saves the emote fields it filled in for an older file', async () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 }));

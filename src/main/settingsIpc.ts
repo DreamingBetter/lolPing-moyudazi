@@ -79,7 +79,7 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.set, (_e, raw: unknown): SetSettingsResult => {
     const patch = rendererPatch(raw);
     if (patchClashes(d.store.get(), patch, d.platform)) {
-      return { ok: false, error: d.text().emoteKeyClash, settings: d.store.get() };
+      return { ok: false, error: d.text().actionKeyClash, settings: d.store.get() };
     }
     if (patch.toggleHotkey) {
       const error = hotkeyConflict(patch.toggleHotkey, d.store.get().toggleHotkey, d.text(), d.platform);
