@@ -43,6 +43,13 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Keep settings normalized and versioned in shared code; validate anything user-editable.
 - Keep global input capture conservative so normal desktop interactions are not hijacked unexpectedly.
 - Add focused tests for settings normalization, wheel/action selection, and main-process action execution.
+- After each development round, provide a way for the user to see the result. Prefer `npm run dev` for fast iteration; use `npm run dist` to create a Windows installer only when the user needs an installable build or release-style testing.
+- For this Electron app, rebuilding the installer is not required for every code change. Rebuild the native helper with `npm run build:helper` when helper code changes, then run the app in development mode.
+- On Windows dev machines where an installed lolPing instance has already used `%APPDATA%\lolPing`, start development with a separate Electron user-data directory to avoid cache and single-instance-lock conflicts:
+  ```powershell
+  $env:ELECTRON_CLI_ARGS='["--user-data-dir=C:\\Users\\DELL\\AppData\\Roaming\\lolPing-dev"]'
+  npm run dev
+  ```
 - Record important product decisions and development conventions here as they emerge.
 
 ## Asset Notes

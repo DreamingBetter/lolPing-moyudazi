@@ -43,7 +43,13 @@ export class InputBridge extends EventEmitter {
     if (this.child || this.restartTimer) return;
     this.stopping = false;
     this.setStatus('starting');
-    const child = spawn(this.opts.command, this.opts.args ?? [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let child: ChildProcess;
+    try {
+      child = spawn(this.opts.command, this.opts.args ?? [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    } catch (err) {
+      this.onExit((err as Error).message, null);
+      return;
+    }
     this.child = child;
     let gone = false;
     const onGone = (reason: string, code: number | null = null) => {
