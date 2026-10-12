@@ -82,13 +82,6 @@ describe('executeAction', () => {
     expect(deps.openPath).toHaveBeenCalledWith('C:\\Users\\me');
   });
 
-  it('copies date and time', async () => {
-    await executeAction(slot('copyDate'), deps);
-    await executeAction(slot('copyTime'), deps);
-    expect(deps.writeClipboard).toHaveBeenCalledWith('2026-10-10');
-    expect(deps.writeClipboard).toHaveBeenCalledWith('08:09');
-  });
-
   it('returns unsupported for Windows-only actions on macOS', async () => {
     deps.platform = 'mac';
     await expect(executeAction(slot('screenshot'), deps)).resolves.toEqual({ ok: false, reason: 'unsupported' });

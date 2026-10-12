@@ -1,11 +1,11 @@
 export type ActionKind =
   | 'screenshot' | 'showDesktop' | 'lockScreen' | 'muteToggle' | 'volumeUp' | 'volumeDown'
   | 'openBrowser' | 'openUrl' | 'openApp' | 'openFile' | 'openFolder'
-  | 'openDownloads' | 'openDesktop' | 'openHome' | 'copyDate' | 'copyTime';
+  | 'openDownloads' | 'openDesktop' | 'openHome';
 
 export type ActionIcon =
   | 'screenshot' | 'desktop' | 'lock' | 'mute' | 'volume-up' | 'volume-down'
-  | 'browser' | 'web' | 'app' | 'file' | 'folder' | 'downloads' | 'home' | 'calendar' | 'clock';
+  | 'browser' | 'web' | 'app' | 'file' | 'folder' | 'downloads' | 'home';
 
 export interface ActionSlot {
   id: string;
@@ -33,8 +33,6 @@ export const ACTION_TEMPLATES: readonly ActionSlot[] = [
   { id: 'tpl-openDownloads', kind: 'openDownloads', label: 'Open Downloads', icon: 'downloads' },
   { id: 'tpl-openDesktop', kind: 'openDesktop', label: 'Open Desktop', icon: 'desktop' },
   { id: 'tpl-openHome', kind: 'openHome', label: 'Open Home', icon: 'home' },
-  { id: 'tpl-copyDate', kind: 'copyDate', label: 'Copy date', icon: 'calendar' },
-  { id: 'tpl-copyTime', kind: 'copyTime', label: 'Copy time', icon: 'clock' },
 ];
 
 export const DEFAULT_ACTION_WHEEL: readonly ActionSlot[] = [

@@ -42,10 +42,6 @@ async function openPath(path: string, deps: ActionExecutorDeps): Promise<ActionR
   return error ? { ok: false, reason: 'openFailed', message: error } : { ok: true };
 }
 
-const ymd = (d: Date): string =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const hm = (d: Date): string => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-
 export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps): Promise<ActionResult> {
   const windowsOnly: readonly ActionSlot['kind'][] = ['screenshot', 'showDesktop', 'lockScreen', 'muteToggle', 'volumeUp', 'volumeDown'];
   if (deps.platform !== 'win' && windowsOnly.includes(slot.kind)) return { ok: false, reason: 'unsupported' };
@@ -92,11 +88,5 @@ export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps):
       return openPath(deps.paths.desktop, deps);
     case 'openHome':
       return openPath(deps.paths.home, deps);
-    case 'copyDate':
-      deps.writeClipboard(ymd(deps.now()));
-      return { ok: true };
-    case 'copyTime':
-      deps.writeClipboard(hm(deps.now()));
-      return { ok: true };
   }
 }

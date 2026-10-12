@@ -256,7 +256,7 @@ describe('emote settings', () => {
 
 describe('emote key clashes', () => {
   const toggle = { mods: MOD.ctrl | MOD.alt, vk: 0x50 };
-  const current = { ...DEFAULT_SETTINGS, trigger: 'alt' as const, emoteTrigger: 'ctrl' as const };
+  const current = { ...DEFAULT_SETTINGS, trigger: 'alt' as const, emoteTrigger: 'ctrl' as const, actionTrigger: 'win' as const };
 
   it('compares triggers by name or key code', () => {
     expect(sameTrigger('alt', 'alt')).toBe(true);
@@ -331,9 +331,9 @@ describe('emote key clashes', () => {
 });
 
 describe('action wheel settings', () => {
-  it('defaults to Win and carries the default action wheel', () => {
+  it('defaults to Shift and carries the default action wheel', () => {
     const s = normalizeSettings(undefined);
-    expect(s.actionTrigger).toBe('win');
+    expect(s.actionTrigger).toBe('shift');
     expect(s.actionWheel.map((a) => a.kind)).toEqual([
       'screenshot', 'muteToggle', 'showDesktop', 'lockScreen',
       'openBrowser', 'openUrl', 'openApp', 'openFolder',

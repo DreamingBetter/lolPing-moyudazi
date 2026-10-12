@@ -16,8 +16,10 @@ describe('action model', () => {
     expect(ACTION_TEMPLATES.map((a) => a.kind)).toEqual([
       'screenshot', 'showDesktop', 'lockScreen', 'muteToggle', 'volumeUp', 'volumeDown',
       'openBrowser', 'openUrl', 'openApp', 'openFile', 'openFolder',
-      'openDownloads', 'openDesktop', 'openHome', 'copyDate', 'copyTime',
+      'openDownloads', 'openDesktop', 'openHome',
     ]);
+    expect(ACTION_TEMPLATES.some((a) => a.kind === 'copyDate')).toBe(false);
+    expect(ACTION_TEMPLATES.some((a) => a.kind === 'copyTime')).toBe(false);
   });
 
   it('normalizes a parameterized URL action', () => {

@@ -116,7 +116,7 @@ export const DEFAULT_SETTINGS: Settings = {
   emoteSizePx: 150,
   emoteSound: true,
   customEmotes: [],
-  actionTrigger: 'win',
+  actionTrigger: 'shift',
   actionWheel: cloneActionSlots(DEFAULT_ACTION_WHEEL),
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
@@ -163,8 +163,8 @@ const optionalTriggerKey = (raw: unknown, platform: Platform, fallback: TriggerK
 /** The emote key as stored, before the clash rules: 'off', or a trigger key with Ctrl as the fallback. */
 const emoteKey = (raw: unknown, platform: Platform): EmoteTriggerKey => optionalTriggerKey(raw, platform, 'ctrl');
 
-/** The action key as stored, before the clash rules: 'off', or a trigger key with Win as the fallback. */
-const actionKey = (raw: unknown, platform: Platform): ActionTriggerKey => optionalTriggerKey(raw, platform, 'win');
+/** The action key as stored, before the clash rules: 'off', or a trigger key with Shift as the fallback. */
+const actionKey = (raw: unknown, platform: Platform): ActionTriggerKey => optionalTriggerKey(raw, platform, 'shift');
 
 /** The Caps Lock key's code: the named 'capslock' trigger and a custom { vk: 0x14 } are one physical key. */
 const CAPS_LOCK_VK = 0x14;
