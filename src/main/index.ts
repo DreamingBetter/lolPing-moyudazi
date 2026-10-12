@@ -375,6 +375,9 @@ function start(): void {
       clipboardCode,
       copyCode: copyRoomCode,
       retryInternet: () => relay.retryNow(),
+      chatState: () => room.chatState(),
+      sendChat: (text) => room.sendChat(text),
+      retryChat: (id) => room.retryChat(id),
     },
   });
   // The page can't report that it went away mid-capture (window closed, renderer crashed): release the suspend here.
