@@ -661,11 +661,52 @@ describe('chat', () => {
     const item = (id: string, peer: string, text: string) => ({ id, peer, ts: Number.parseInt(id.slice(-2), 16), name: peer === alex.peer ? 'Alex' : 'Ben', color: 2, text });
     const chunks = Array.from({ length: 7 }, (_, i) => ids.slice(i * 8, i === 6 ? undefined : i * 8 + 8));
     chunks.slice(0, 4).forEach((chunk, part) => alex.history(request.request, part, 4, chunk.map((id) => item(id, alex.peer, 'x'))));
-    chunks.slice(4).forEach((chunk, part) => ben.history(request.request, part, 3, chunk.map((id) => item(id, ben.peer, 'x'))));
+    chunks.slice(4).forEach((chunk, part) => {
+      const messages = chunk.map((id) => item(id, ben.peer, 'x'));
+      if (part === 0) messages.push(item(ids[10], ben.peer, 'duplicate id from another member'));
+      ben.history(request.request, part, 3, messages);
+    });
     ben.history(request.request, 0, 1, [item(ids[50], ben.peer, 'duplicate')]);
     expect(room.chatState().messages).toHaveLength(50);
     expect(new Set(room.chatState().messages.map((m) => m.id)).size).toBe(50);
     expect(room.chatState().messages[0].id).toBe(ids[1]);
+  });
+
+  it('does not include a failed local message in history until retry succeeds', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence();
+    lan.emit('peerGone', alex.key);
+    const first = room.sendChat('not yet');
+    expect(first).toMatchObject({ ok: false, error: 'failed' });
+    alex.presence();
+    lan.sent = [];
+    alex.historyRequest('0123456789abcdef0123456789abcdef');
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'chatHistory')).toEqual([
+      expect.objectContaining({ t: 'chatHistory', messages: [] }),
+    ]);
+    const failed = room.chatState().messages[0];
+    expect(room.retryChat(failed.id)).toEqual({ ok: true, id: failed.id });
+    lan.sent = [];
+    alex.historyRequest('fedcba9876543210fedcba9876543210');
+    const historyMsg = sentMessages('lan:alex').find((m) => m.t === 'chatHistory');
+    expect(historyMsg).toMatchObject({ t: 'chatHistory', messages: [expect.objectContaining({ id: failed.id, text: 'not yet' })] });
+  });
+
+  it('rejoining the same code is empty unless an in-memory member hands history back', async () => {
+    await joinActive();
+    room.sendChat('recoverable');
+    const old = room.chatState().messages[0];
+    room.leave();
+    await room.join(formatRoomCode(CODE));
+    expect(room.chatState().messages).toEqual([]);
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence();
+    const request = sentMessages('lan:alex').find((m) => m.t === 'chatHistoryRequest');
+    expect(request?.t).toBe('chatHistoryRequest');
+    if (request?.t !== 'chatHistoryRequest') return;
+    alex.history(request.request, 0, 1, [{ id: old.id, peer: SELF, ts: old.ts, name: 'Me', color: 1, text: old.text }]);
+    expect(room.chatState().messages).toMatchObject([{ id: old.id, text: 'recoverable' }]);
   });
 
   it('clears chat state when leaving the room', async () => {
