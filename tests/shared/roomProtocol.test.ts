@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeName, validateMessage, type EmoteMsg, type PingMsg,
-  type PresenceMsg, type RoomMessage,
+  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeChatText, sanitizeName, validateMessage, type ChatHistoryMsg,
+  type ChatHistoryRequestMsg, type ChatMsg, type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
@@ -10,9 +10,21 @@ const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', 
 const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 };
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
+const chat: ChatMsg = { ...base, t: 'chat', id: '0123456789abcdef0123456789abcdef', text: 'hello\nworld' };
+const historyRequest: ChatHistoryRequestMsg = {
+  ...base, t: 'chatHistoryRequest', request: 'fedcba9876543210fedcba9876543210',
+};
+const history: ChatHistoryMsg = {
+  ...base,
+  t: 'chatHistory',
+  request: historyRequest.request,
+  part: 0,
+  total: 1,
+  messages: [{ id: chat.id, peer: base.peer, ts: base.ts, name: 'Alex', color: 3, text: 'hello' }],
+};
 
 describe('encode / decode', () => {
-  it.each<RoomMessage>([presence, ping, { ...base, t: 'bye' }])('round-trips $t', (m) => {
+  it.each<RoomMessage>([presence, ping, emote, chat, historyRequest, history, { ...base, t: 'bye' }])('round-trips $t', (m) => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });
 
@@ -77,6 +89,46 @@ describe('validateMessage', () => {
 
   it('sanitises the name', () => {
     expect(validateMessage({ ...presence, name: '‮Alex\u0000' })).toMatchObject({ name: 'Alex' });
+  });
+});
+
+describe('chat messages', () => {
+  it('sanitises valid multiline chat text and keeps known fields only', () => {
+    expect(validateMessage({ ...chat, text: '  hello\r\nworld\rbye  ', extra: 'ignored' })).toEqual({
+      ...chat,
+      text: 'hello\nworld\nbye',
+    });
+  });
+
+  it.each([
+    ['invalid id', { ...chat, id: 'ABC' }],
+    ['invalid request id', { ...historyRequest, request: 'not-an-id' }],
+    ['empty text', { ...chat, text: ' \n\t ' }],
+    ['too long', { ...chat, text: 'x'.repeat(1001) }],
+    ['negative part', { ...history, part: -1 }],
+    ['part after total', { ...history, part: 1, total: 1 }],
+    ['zero total', { ...history, total: 0 }],
+    ['too many parts', { ...history, total: 257 }],
+    ['too many history items', {
+      ...history,
+      messages: Array.from({ length: 51 }, (_, i) => ({ ...history.messages[0], id: i.toString(16).padStart(32, '0') })),
+    }],
+    ['invalid history item id', { ...history, messages: [{ ...history.messages[0], id: 'bad' }] }],
+    ['invalid history item peer', { ...history, messages: [{ ...history.messages[0], peer: 'bad' }] }],
+    ['invalid history item timestamp', { ...history, messages: [{ ...history.messages[0], ts: -1 }] }],
+    ['invalid history item name', { ...history, messages: [{ ...history.messages[0], name: 3 }] }],
+    ['invalid history item colour', { ...history, messages: [{ ...history.messages[0], color: 99 }] }],
+    ['invalid history item text', { ...history, messages: [{ ...history.messages[0], text: ' ' }] }],
+  ])('rejects %s', (label, raw) => {
+    if (label.startsWith('invalid history item')) {
+      expect(validateMessage(raw)).toMatchObject({ t: 'chatHistory', messages: [] });
+    } else {
+      expect(validateMessage(raw)).toBeNull();
+    }
+  });
+
+  it('drops dangerous chat characters and normalises line endings', () => {
+    expect(sanitizeChatText('\u0000A\u0085\u200b\u200e\u202aB\u2028C\u2029D\r\nE\rF')).toBe('ABCD\nE\nF');
   });
 });
 

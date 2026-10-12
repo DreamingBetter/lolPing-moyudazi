@@ -1,6 +1,7 @@
 import { isEmoteRefShape, type EmoteRef } from './emotes';
 import { isPingId, type PingId } from './pings';
 import { isTagColor } from './roomColors';
+import { CHAT_TEXT_MAX_CODE_POINTS, type ChatHistoryItem } from './roomChat';
 
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
@@ -48,13 +49,31 @@ export interface EmoteMsg extends Base {
 export interface ByeMsg extends Base {
   t: 'bye';
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | ByeMsg;
+export interface ChatMsg extends Base {
+  t: 'chat';
+  id: string;
+  text: string;
+}
+export interface ChatHistoryRequestMsg extends Base {
+  t: 'chatHistoryRequest';
+  request: string;
+}
+export interface ChatHistoryMsg extends Base {
+  t: 'chatHistory';
+  request: string;
+  part: number;
+  total: number;
+  messages: ChatHistoryItem[];
+}
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | ByeMsg | ChatMsg | ChatHistoryRequestMsg | ChatHistoryMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
 // (blank characters that would make a name invisible).
 const UNSAFE_CHARS =
   /[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g;
+const UNSAFE_CHAT_CHARS =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g;
 
 /** While typing: at most MAX_NAME code points (an emoji counts once; maxLength would count UTF-16 units). */
 export const clampNameInput = (v: string): string => [...v].slice(0, MAX_NAME).join('');
@@ -65,9 +84,29 @@ export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): 
   return name || fallback;
 }
 
+export function sanitizeChatText(raw: string): string {
+  return [...sanitizeChatTextRaw(raw)]
+    .slice(0, CHAT_TEXT_MAX_CODE_POINTS)
+    .join('');
+}
+
+function sanitizeChatTextRaw(raw: string): string {
+  return raw.replace(UNSAFE_CHAT_CHARS, '').replace(/\r\n?/g, '\n').trim();
+}
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isUint = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 const isUnit = (v: unknown): v is number => typeof v === 'number' && v >= 0 && v <= 1;
+export const isChatId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v);
+
+function chatHistoryItem(raw: unknown): ChatHistoryItem | null {
+  if (!isObj(raw)) return null;
+  const { id, peer, ts, name, color, text } = raw;
+  const clean = typeof text === 'string' ? sanitizeChatTextRaw(text) : '';
+  if (!isChatId(id) || typeof peer !== 'string' || !/^[0-9a-f]{16}$/.test(peer) || !isUint(ts) || typeof name !== 'string') return null;
+  if (!isTagColor(color) || !clean || [...clean].length > CHAT_TEXT_MAX_CODE_POINTS) return null;
+  return { id, peer, ts, name: sanitizeName(name.slice(0, 256)), color, text: clean };
+}
 
 /** Builds a fresh message from known fields only, or null when anything is missing or out of range. */
 export function validateMessage(raw: unknown): RoomMessage | null {
@@ -96,6 +135,31 @@ export function validateMessage(raw: unknown): RoomMessage | null {
     }
     case 'bye':
       return { t, ...base };
+    case 'chat': {
+      const { id, text } = raw;
+      const clean = typeof text === 'string' ? sanitizeChatTextRaw(text) : '';
+      if (!isChatId(id) || !clean || [...clean].length > CHAT_TEXT_MAX_CODE_POINTS) return null;
+      return { t, ...base, id, text: clean };
+    }
+    case 'chatHistoryRequest': {
+      const { request } = raw;
+      if (!isChatId(request)) return null;
+      return { t, ...base, request };
+    }
+    case 'chatHistory': {
+      const { request, part, total, messages } = raw;
+      if (!isChatId(request) || !isUint(part) || !isUint(total) || total < 1 || total > 256 || part >= total || !Array.isArray(messages) || messages.length > 50) {
+        return null;
+      }
+      return {
+        t,
+        ...base,
+        request,
+        part,
+        total,
+        messages: messages.map(chatHistoryItem).filter((item): item is ChatHistoryItem => item !== null),
+      };
+    }
     default:
       return null;
   }
