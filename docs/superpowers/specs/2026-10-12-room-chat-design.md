@@ -156,7 +156,7 @@ Validation rules:
 - `text` is trimmed, must be non-empty, and is limited to 1000 code points.
 - A chat packet must also fit the existing 1200-byte sealed room-packet limit after UTF-8 encoding. Text that exceeds the byte budget is rejected as `too-long`, even when it is below the code-point limit.
 - Text sanitisation removes C0/C1 control characters, bidi controls, zero-width characters and line/paragraph separators that can hide or reorder UI text. Normal whitespace and newlines are allowed.
-- `part` is zero-based, `total` is 1 to 64, and each `part` is less than `total`.
+- `part` is zero-based, `total` is 1 to 256, and each `part` is less than `total`.
 - A history response contains at most 200 messages in total, but is split into as many `chatHistory` packets as needed to fit the existing sealed-packet limit. The receiver merges all parts for the matching request and dedupes by message ID.
 - History items from unknown future shapes are dropped item-by-item; a malformed envelope is dropped as today.
 - Unknown extra fields are ignored.
