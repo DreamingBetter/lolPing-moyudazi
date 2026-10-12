@@ -197,7 +197,6 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
             <DialogTitle>{draft ? t.actionEditTitle(actionDisplayName(draft, t)) : t.actionLibrary}</DialogTitle>
             <DialogContent>
               <div className="actionConfigDialog">
-                <span className="desc">{t.actionEditDesc}</span>
                 {!needsVolume ? <Field label={t.actionLabel}>
                   <Input value={draft?.label ?? ''} onChange={(_, data) => updateDraft({ label: data.value })} />
                 </Field> : null}

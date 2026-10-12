@@ -38,6 +38,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Users must be able to edit every parameterized action wheel slot.
 - Provide more built-in action options than the default 8 so users can replace slots without needing to create everything from scratch.
 - The action wheel editor should combine drag-and-drop and modal parameter editing: drag actions from the built-in library onto wheel slots; actions that need details open a modal and are placed only after valid configuration. Do not use a permanent configuration panel under the wheel. Click an existing parameterized slot to edit parameters such as URL, app path, file path, folder path, or volume step.
+- Do not put generic instructional copy inside action configuration dialogs when validation and disabled save states already express the requirement. Keep these dialogs focused on the fields the user actually edits.
 - Action library entries and wheel slots should expose a concise localized description on hover. Keep the visible label short, and make parameter requirements clear in the description.
 - The overlay should only render the action wheel and report the selected action. Execute actions in the Electron main process so opening apps/files/URLs and system operations stay behind the main-process boundary.
 - Do not add a separate entertainment wheel for now; the existing ping and emote wheels cover expressive/fun use cases.
