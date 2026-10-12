@@ -21,6 +21,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
   - Quick launch: apps, websites, files, and folders.
   - Desktop operations: screenshots, lock screen, mute/volume, show desktop, and similar system actions.
 - Do not add dedicated "open Desktop", "open Downloads", or "open user folder" actions; users can cover those with the configurable "open folder" action.
+- Browser actions should use the system default browser. Do not open `about:blank` through Electron `shell.openExternal`, because Windows does not route the `about:` scheme through the default browser picker. Use a normal `https://` start URL for the "open browser" action and user-configured `https://` URLs for "open website".
 - Show Desktop should use the Windows Shell `ToggleDesktop()` path rather than injecting Win + D, which can be swallowed by trigger-key state.
 - Volume up/down actions are configurable actions with a `volumeStep` integer from 1 to 10; execution repeats the system media key by that step.
 - Ship the action wheel with a sensible default 8-slot layout:

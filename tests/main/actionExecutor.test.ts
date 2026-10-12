@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { executeAction, type ActionExecutorDeps } from '../../src/main/actionExecutor';
+import { DEFAULT_BROWSER_URL, executeAction, type ActionExecutorDeps } from '../../src/main/actionExecutor';
 import type { ActionSlot } from '../../src/shared/actions';
 
 const slot = (kind: ActionSlot['kind'], params?: ActionSlot['params']): ActionSlot =>
@@ -9,7 +9,6 @@ let deps: ActionExecutorDeps;
 beforeEach(() => {
   deps = {
     platform: 'win',
-    openDefaultBrowser: vi.fn(async () => undefined),
     openExternal: vi.fn(async () => undefined),
     openPath: vi.fn(async () => ''),
     run: vi.fn(async () => undefined),
@@ -26,10 +25,10 @@ describe('executeAction', () => {
       .resolves.toEqual({ ok: false, reason: 'invalidUrl' });
   });
 
-  it('opens the default browser without opening a fixed website', async () => {
+  it('opens the default browser with a web URL the OS can route', async () => {
     await expect(executeAction(slot('openBrowser'), deps)).resolves.toEqual({ ok: true });
-    expect(deps.openDefaultBrowser).toHaveBeenCalledTimes(1);
-    expect(deps.openExternal).not.toHaveBeenCalled();
+    expect(DEFAULT_BROWSER_URL).toMatch(/^https:\/\//);
+    expect(deps.openExternal).toHaveBeenCalledWith(DEFAULT_BROWSER_URL);
   });
 
   it('reports missing config for parameterized actions', async () => {

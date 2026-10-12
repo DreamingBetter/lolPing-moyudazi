@@ -3,10 +3,10 @@ import type { Platform } from '../shared/platform';
 
 export type ActionFailureReason = 'missingConfig' | 'invalidUrl' | 'pathMissing' | 'openFailed' | 'unsupported';
 export type ActionResult = { ok: true } | { ok: false; reason: ActionFailureReason; message?: string };
+export const DEFAULT_BROWSER_URL = 'https://www.bing.com/';
 
 export interface ActionExecutorDeps {
   platform: Platform;
-  openDefaultBrowser(): Promise<void>;
   openExternal(url: string): Promise<void>;
   openPath(path: string): Promise<string>;
   run(command: string, args: string[]): Promise<void>;
@@ -68,7 +68,7 @@ export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps):
       injectMediaKey([0xae], slot, deps);
       return { ok: true };
     case 'openBrowser':
-      await deps.openDefaultBrowser();
+      await deps.openExternal(DEFAULT_BROWSER_URL);
       return { ok: true };
     case 'openUrl': {
       const raw = urlParam(slot);
