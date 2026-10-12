@@ -6,9 +6,10 @@ export type ActionIcon =
   | 'screenshot' | 'desktop' | 'lock' | 'mute' | 'volume-up' | 'volume-down'
   | 'browser' | 'web' | 'app' | 'file' | 'folder';
 
-export const VOLUME_STEP_MIN = 1;
-export const VOLUME_STEP_MAX = 10;
-export const DEFAULT_VOLUME_STEP = 1;
+export const VOLUME_STEP_INCREMENT = 2;
+export const VOLUME_STEP_MIN = VOLUME_STEP_INCREMENT;
+export const VOLUME_STEP_MAX = 20;
+export const DEFAULT_VOLUME_STEP = VOLUME_STEP_INCREMENT;
 
 export interface ActionSlot {
   id: string;
@@ -64,9 +65,12 @@ const cleanText = (v: unknown, fallback: string): string => {
 };
 
 export const normalizeVolumeStep = (v: unknown): number => {
-  const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : DEFAULT_VOLUME_STEP;
-  return Math.min(VOLUME_STEP_MAX, Math.max(VOLUME_STEP_MIN, n));
+  const raw = typeof v === 'number' && Number.isFinite(v) ? v : DEFAULT_VOLUME_STEP;
+  const even = Math.round(raw / VOLUME_STEP_INCREMENT) * VOLUME_STEP_INCREMENT;
+  return Math.min(VOLUME_STEP_MAX, Math.max(VOLUME_STEP_MIN, even));
 };
+
+export const volumeStepToMediaKeyPresses = (v: unknown): number => normalizeVolumeStep(v) / VOLUME_STEP_INCREMENT;
 
 export const isActionKind = (v: unknown): v is ActionKind => typeof v === 'string' && KINDS.has(v as ActionKind);
 

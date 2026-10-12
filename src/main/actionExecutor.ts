@@ -1,4 +1,4 @@
-import { normalizeVolumeStep, type ActionSlot } from '../shared/actions';
+import { volumeStepToMediaKeyPresses, type ActionSlot } from '../shared/actions';
 import type { Platform } from '../shared/platform';
 
 export type ActionFailureReason = 'missingConfig' | 'invalidUrl' | 'pathMissing' | 'openFailed' | 'unsupported';
@@ -40,7 +40,7 @@ async function openPath(path: string, deps: ActionExecutorDeps): Promise<ActionR
 }
 
 function injectMediaKey(keys: number[], slot: ActionSlot, deps: ActionExecutorDeps): void {
-  const count = normalizeVolumeStep(slot.params?.volumeStep);
+  const count = volumeStepToMediaKeyPresses(slot.params?.volumeStep);
   for (let i = 0; i < count; i += 1) deps.injectKeys(keys);
 }
 

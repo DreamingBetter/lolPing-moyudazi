@@ -26,7 +26,8 @@ describe('action configuration helpers', () => {
     expect(validateActionConfig(slot('openApp', { path: '   ' }))).toBe('path');
     expect(validateActionConfig(slot('openFile', { path: 'C:\\Docs\\note.txt' }))).toBeNull();
     expect(validateActionConfig(slot('volumeUp', { volumeStep: 0 }))).toBe('volumeStep');
-    expect(validateActionConfig(slot('volumeDown', { volumeStep: 3 }))).toBeNull();
+    expect(validateActionConfig(slot('volumeDown', { volumeStep: 3 }))).toBe('volumeStep');
+    expect(validateActionConfig(slot('volumeDown', { volumeStep: 6 }))).toBeNull();
   });
 
   it('creates unique configured slots so the same template can be used more than once', () => {

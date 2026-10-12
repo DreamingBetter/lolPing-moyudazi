@@ -49,19 +49,19 @@ describe('action model', () => {
     expect(wheel[2]).toMatchObject(DEFAULT_ACTION_WHEEL[2]);
   });
 
-  it('normalizes volume action steps', () => {
+  it('normalizes volume actions to even volume deltas', () => {
     expect(normalizeActionSlot({
       id: 'louder',
       kind: 'volumeUp',
       label: 'More',
       icon: 'volume-up',
-      params: { volumeStep: 4 },
+      params: { volumeStep: 6 },
     }, 0)).toEqual({
       id: 'louder',
       kind: 'volumeUp',
       label: 'More',
       icon: 'volume-up',
-      params: { volumeStep: 4 },
+      params: { volumeStep: 6 },
     });
     expect(normalizeActionSlot({
       id: 'quiet',
@@ -69,14 +69,21 @@ describe('action model', () => {
       label: 'Less',
       icon: 'volume-down',
       params: { volumeStep: 99 },
-    }, 0).params).toEqual({ volumeStep: 10 });
+    }, 0).params).toEqual({ volumeStep: 20 });
+    expect(normalizeActionSlot({
+      id: 'odd',
+      kind: 'volumeUp',
+      label: 'Odd',
+      icon: 'volume-up',
+      params: { volumeStep: 3 },
+    }, 0).params).toEqual({ volumeStep: 4 });
     expect(normalizeActionSlot({
       id: 'bad',
       kind: 'volumeUp',
       label: 'Bad',
       icon: 'volume-up',
       params: { volumeStep: 'x' },
-    }, 0).params).toEqual({ volumeStep: 1 });
+    }, 0).params).toEqual({ volumeStep: 2 });
   });
 
   it('repairs duplicate ids without reusing an existing repaired id', () => {

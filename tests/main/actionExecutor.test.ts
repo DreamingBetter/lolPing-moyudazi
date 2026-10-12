@@ -60,9 +60,9 @@ describe('executeAction', () => {
     expect(deps.injectKeys).toHaveBeenCalledWith([0xad]);
   });
 
-  it('repeats volume media keys according to the configured step', async () => {
-    await executeAction(slot('volumeUp', { volumeStep: 3 }), deps);
-    await executeAction(slot('volumeDown', { volumeStep: 2 }), deps);
+  it('converts configured volume delta to media key presses', async () => {
+    await executeAction(slot('volumeUp', { volumeStep: 6 }), deps);
+    await executeAction(slot('volumeDown', { volumeStep: 4 }), deps);
     const keys = vi.mocked(deps.injectKeys).mock.calls.map(([call]) => call[0]);
     expect(keys.filter((key) => key === 0xaf)).toHaveLength(3);
     expect(keys.filter((key) => key === 0xae)).toHaveLength(2);

@@ -8,11 +8,16 @@ import {
   DialogTitle,
   Field,
   Input,
+  Slider,
 } from '@fluentui/react-components';
 import { Apps24Regular, Folder24Regular, Keyboard24Regular } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_ACTION_WHEEL,
+  DEFAULT_VOLUME_STEP,
+  VOLUME_STEP_INCREMENT,
+  VOLUME_STEP_MAX,
+  VOLUME_STEP_MIN,
   actionTemplate,
   isActionKind,
   type ActionKind,
@@ -161,6 +166,7 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
   const issue = draft ? validateActionConfig(draft) : null;
   const needsPath = draft?.kind === 'openApp' || draft?.kind === 'openFile' || draft?.kind === 'openFolder';
   const needsVolume = draft?.kind === 'volumeUp' || draft?.kind === 'volumeDown';
+  const volumeStep = draft?.params?.volumeStep ?? DEFAULT_VOLUME_STEP;
 
   return (
     <>
@@ -219,14 +225,16 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
                 {needsVolume ? (
                   <Field label={t.actionVolumeStep} validationState={issue === 'volumeStep' ? 'error' : 'none'}
                     validationMessage={issueMessage(issue === 'volumeStep' ? issue : null, t)}>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={10}
-                      step={1}
-                      value={String(draft?.params?.volumeStep ?? '')}
-                      onChange={(_, data) => updateDraftParams({ volumeStep: Number(data.value) })}
-                    />
+                    <div className="actionVolumeRow">
+                      <Slider
+                        min={VOLUME_STEP_MIN}
+                        max={VOLUME_STEP_MAX}
+                        step={VOLUME_STEP_INCREMENT}
+                        value={volumeStep}
+                        onChange={(_, data) => updateDraftParams({ volumeStep: data.value })}
+                      />
+                      <span className="value">{volumeStep}</span>
+                    </div>
                   </Field>
                 ) : null}
               </div>
