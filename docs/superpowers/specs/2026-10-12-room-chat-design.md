@@ -25,9 +25,9 @@ Success criteria:
 | Information architecture | Add a dedicated `Chat` page to the settings window navigation. Keep `Room` for room setup and network/member controls. |
 | Default navigation | Creating or joining a room switches the settings window to `Chat`. Opening room settings from the tray still opens `Room`. |
 | Message content | Plain text only. Trim before sending. Empty messages are not sent. |
-| History model | Online-member relay: each client keeps the latest 200 messages in memory and can provide them to new joiners. |
+| History model | Online-member relay: each client keeps the latest 50 messages in memory and can provide them to new joiners. |
 | Persistence | No disk persistence and no server persistence. Leaving a room clears the local chat cache. |
-| History limit | Latest 200 messages. No time limit. |
+| History limit | Latest 50 messages. No time limit. |
 | Send status | Lightweight reliable UI: `sending`, `sent`, `failed`; no remote ACK, read receipt or delivered count. |
 | Mute/pause | Room mute, global pause and per-member mute do not affect chat. They continue to apply only to pings and emotes. |
 | Room size | Same room member cap as existing rooms. |
@@ -157,7 +157,7 @@ Validation rules:
 - A chat packet must also fit the existing 1200-byte sealed room-packet limit after UTF-8 encoding. Text that exceeds the byte budget is rejected as `too-long`, even when it is below the code-point limit.
 - Text sanitisation removes C0/C1 control characters, bidi controls, zero-width characters and line/paragraph separators that can hide or reorder UI text. Normal whitespace and newlines are allowed.
 - `part` is zero-based, `total` is 1 to 256, and each `part` is less than `total`.
-- A history response contains at most 200 messages in total, but is split into as many `chatHistory` packets as needed to fit the existing sealed-packet limit. The receiver merges all parts for the matching request and dedupes by message ID.
+- A history response contains at most 50 messages in total, but is split into as many `chatHistory` packets as needed to fit the existing sealed-packet limit. The receiver merges all parts for the matching request and dedupes by message ID.
 - History items from unknown future shapes are dropped item-by-item; a malformed envelope is dropped as today.
 - Unknown extra fields are ignored.
 
@@ -167,7 +167,7 @@ Do not bump `PROTOCOL_VERSION` for this first chat version. Older clients drop u
 
 `RoomManager` owns:
 
-- `chatMessages`: latest 200 messages in memory for the current join session.
+- `chatMessages`: latest 50 messages in memory for the current join session.
 - `pendingLocal`: local messages still in `sending` or `failed`.
 - message ID dedupe set for recent chat/history message IDs.
 
@@ -189,12 +189,12 @@ On incoming `chat`:
 - Do not apply ping/emote mute gates.
 - Validate and dedupe by message ID.
 - Append to the memory cache.
-- Trim cache to 200 messages.
+- Trim cache to 50 messages.
 - Push chat state to settings windows.
 
 On incoming `chatHistoryRequest`:
 
-- If in a room, send one `chatHistory` response containing this client's latest 200 cached messages.
+- If in a room, send one `chatHistory` response containing this client's latest 50 cached messages.
 - Split the response into packet-sized parts before sealing. Response parts go through the same routing logic as other shared room messages.
 - To avoid a joiner getting many duplicate histories, the joiner dedupes by ID. A later optimization can make only one peer answer, but that is not necessary for a room capped at 8 members.
 
@@ -202,7 +202,7 @@ On incoming `chatHistory`:
 
 - Match the `request` ID against a recent local request.
 - Validate the part, collect it for the matching request, dedupe each item by message ID, merge available parts, sort by timestamp then stable ID.
-- Trim to 200 messages.
+- Trim to 50 messages.
 - Push chat state.
 
 ### 4.4 Sending and Retry
@@ -222,7 +222,7 @@ Then main calls a new RoomManager send method.
 
 Status transitions:
 
-- `sending` -> `sent` if the message is accepted into the active room session and packet creation succeeds. Main then sends it over every available live route or shared transport; if no one else is present yet, it remains in the 200-message cache for later history sync.
+- `sending` -> `sent` if the message is accepted into the active room session and packet creation succeeds. Main then sends it over every available live route or shared transport; if no one else is present yet, it remains in the 50-message cache for later history sync.
 - `sending` -> `failed` if not active in a room, validation fails, packet creation fails, or every attempted transport send throws.
 - Retry keeps the same message ID and text, sets status back to `sending`, and attempts the send again.
 
@@ -254,9 +254,9 @@ The chat feature should preserve the room feature's conservative networking post
 
 Limits:
 
-- Max local cache: 200 messages.
+- Max local cache: 50 messages.
 - Max text length: 1000 code points.
-- Max history payload: 200 messages.
+- Max history payload: 50 messages.
 - Max rendered message line wrapping: UI wraps long words and preserves layout.
 - Outgoing chat rate: 3 messages per second with a burst of 6, per local client.
 - Incoming chat rate: per-peer token bucket, separate from ping/emote limit, 5 messages per second with a burst of 10.
@@ -292,7 +292,7 @@ Unit tests:
   - Retry reuses the same ID and dedupes on receivers.
   - Incoming chat from unknown peers is dropped.
   - History request on join.
-  - History merge, dedupe, ordering and trim to 200.
+  - History merge, dedupe, ordering and trim to 50.
   - Leaving clears chat state.
 
 - `tests/main/settingsIpc.test.ts`
