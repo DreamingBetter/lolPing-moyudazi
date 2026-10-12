@@ -77,7 +77,7 @@ The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist
 - **Pings and sound:** size, duration, volume, mute and the wheel's tick sound.
 - **Wheel:** drag any ping onto any slice, including Bait and Vision Cleared, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
 - **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only.
-- **Action wheel:** the action key (Shift by default, or off), 8 wheel slots, a built-in action library, and parameters for URLs, apps, files and folders. Drag an action from the library onto a slot, then click the slot to edit its details. Hover an action to see what it does and whether it needs configuration.
+- **Action wheel:** the action key (Shift by default, or off), 8 wheel slots, a built-in action library, and parameters for URLs, apps, files, folders and volume steps. Drag an action from the library onto a slot; actions that need details open a dialog first and are placed only after valid configuration. Click an existing configurable slot to edit it. Hover an action to see what it does and whether it needs configuration.
 - **Launch at Windows startup** (**Open at login** on a Mac): starts hidden in the tray or menu bar.
 - **Language:** follows the system display language, or pick English or 简体中文.
 

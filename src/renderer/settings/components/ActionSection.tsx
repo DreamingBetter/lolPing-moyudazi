@@ -1,15 +1,37 @@
-import { Button, Input } from '@fluentui/react-components';
-import { Apps24Regular, Folder24Regular, Keyboard24Regular } from '@fluentui/react-icons';
-import { useEffect, useState } from 'react';
 import {
-  DEFAULT_ACTION_WHEEL, actionTemplate, type ActionKind, type ActionSlot,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  Field,
+  Input,
+} from '@fluentui/react-components';
+import { Apps24Regular, Folder24Regular, Keyboard24Regular } from '@fluentui/react-icons';
+import { useEffect, useRef, useState } from 'react';
+import {
+  DEFAULT_ACTION_WHEEL,
+  actionTemplate,
+  isActionKind,
+  type ActionKind,
+  type ActionSlot,
 } from '../../../shared/actions';
 import { triggerLabel, type Settings } from '../../../shared/settings';
-import type { WheelPatch } from '../../../shared/wheelLayout';
+import type { WheelPatch, WheelSource, WheelTarget } from '../../../shared/wheelLayout';
 import { api } from '../api';
+import {
+  actionParams,
+  cloneActionTemplateForSlot,
+  isActionConfigurable,
+  validateActionConfig,
+  withActionConfig,
+  type ActionConfigIssue,
+} from '../actionConfig';
+import { actionLibraryItems, actionWheelItems } from '../actionItems';
 import { useText } from '../text';
 import type { Update } from '../useAppState';
-import { actionLibraryItems, actionWheelItems } from '../actionItems';
 import { SettingRow } from './rows';
 import { TriggerPicker } from './TriggerPicker';
 import { WheelEditor, type PoolItem } from './WheelEditor';
@@ -27,11 +49,13 @@ const cloneForSlot = (template: ActionSlot, index: number): ActionSlot => ({
   params: template.params ? { ...template.params } : undefined,
 });
 
-function patchForDrop(current: readonly ActionSlot[], p: WheelPatch<ActionPoolId>): Partial<Settings> {
+function patchForDrop(current: readonly ActionSlot[], p: WheelPatch<ActionPoolId>, prepared = new Map<string, ActionSlot>()): Partial<Settings> {
   const next = current.map(copySlot);
   if (!p.wheel) return {};
   return {
     actionWheel: p.wheel.map((id, i) => {
+      const preparedSlot = prepared.get(id);
+      if (preparedSlot) return copySlot(preparedSlot);
       const existing = next.find((a) => a.id === id);
       if (existing) return existing;
       const fallback = DEFAULT_ACTION_WHEEL.find((a) => a.id === id);
@@ -42,13 +66,26 @@ function patchForDrop(current: readonly ActionSlot[], p: WheelPatch<ActionPoolId
   };
 }
 
+function kindFromTemplateId(id: string): ActionKind | null {
+  if (!id.startsWith('template:')) return null;
+  const kind = id.replace(/^template:/, '');
+  return isActionKind(kind) ? kind : null;
+}
+
+function issueMessage(issue: ActionConfigIssue | null, t: ReturnType<typeof useText>): string | undefined {
+  if (issue === 'url') return t.actionConfigUrlError;
+  if (issue === 'path') return t.actionConfigPathError;
+  if (issue === 'volumeStep') return t.actionConfigVolumeError;
+  return undefined;
+}
+
 export function ActionSection({ settings: s, update }: { settings: Settings; update: Update }) {
   const t = useText();
   const [keyError, setKeyError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string>(s.actionWheel[0]?.id ?? '');
-  useEffect(() => {
-    if (!s.actionWheel.some((a) => a.id === selected)) setSelected(s.actionWheel[0]?.id ?? '');
-  }, [s.actionWheel, selected]);
+  const [draft, setDraft] = useState<ActionSlot | null>(null);
+  const configResolver = useRef<((slot: ActionSlot | null) => void) | null>(null);
+  const preparedSlots = useRef(new Map<string, ActionSlot>());
+
   const keys = JSON.stringify([s.trigger, s.emoteTrigger, s.actionTrigger, s.toggleHotkey]);
   useEffect(() => setKeyError(null), [keys]);
 
@@ -57,15 +94,73 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
   const wheelIds = s.actionWheel.map((a) => a.id);
   const pool: PoolItem<ActionPoolId>[] = actionLibraryItems(t);
   const wheelItems: PoolItem<ActionPoolId>[] = actionWheelItems(s.actionWheel, t);
-  const selectedSlot = s.actionWheel.find((a) => a.id === selected);
-  const updateSlot = (patch: Partial<ActionSlot>) => {
-    if (!selectedSlot) return;
-    void update({
-      actionWheel: s.actionWheel.map((a) => (a.id === selectedSlot.id
-        ? { ...a, ...patch, params: patch.params ?? a.params }
-        : a)),
-    });
+
+  const openConfig = (slot: ActionSlot): Promise<ActionSlot | null> => new Promise((resolve) => {
+    configResolver.current = resolve;
+    setDraft(copySlot(slot));
+  });
+
+  const closeConfig = (slot: ActionSlot | null) => {
+    const resolve = configResolver.current;
+    configResolver.current = null;
+    setDraft(null);
+    if (resolve) resolve(slot);
   };
+
+  const saveConfig = () => {
+    if (!draft) return;
+    const configured = withActionConfig(draft, { label: draft.label, params: draft.params });
+    if (validateActionConfig(configured)) return;
+    if (configResolver.current) {
+      closeConfig(configured);
+      return;
+    }
+    void update({
+      actionWheel: s.actionWheel.map((slot) => (slot.id === configured.id ? configured : slot)),
+    });
+    closeConfig(null);
+  };
+
+  const updateDraft = (patch: Partial<ActionSlot>) => {
+    setDraft((current) => (current ? { ...current, ...patch, params: patch.params ?? current.params } : current));
+  };
+
+  const updateDraftParams = (params: ActionSlot['params']) => {
+    setDraft((current) => (current ? { ...current, params: actionParams(current.kind, { ...current.params, ...params }) } : current));
+  };
+
+  const prepareActionDrop = async (src: WheelSource<ActionPoolId>, target: WheelTarget, patch: WheelPatch<ActionPoolId>): Promise<WheelPatch<ActionPoolId> | null> => {
+    if (src.from !== 'pool') return patch;
+    const kind = kindFromTemplateId(src.id);
+    if (!kind || !isActionConfigurable(kind)) return patch;
+
+    const slot = cloneActionTemplateForSlot(kind, typeof target === 'number' ? target : 0, actionTemplate(kind).params);
+    const configured = await openConfig(slot);
+    if (!configured) return null;
+    preparedSlots.current.set(configured.id, configured);
+    return {
+      ...patch,
+      wheel: patch.wheel?.map((id) => (id === src.id ? configured.id : id)),
+      center: patch.center === src.id ? configured.id : patch.center,
+    };
+  };
+
+  const editExistingSlot = (id: ActionPoolId): boolean => {
+    const slot = s.actionWheel.find((a) => a.id === id);
+    if (!slot || !isActionConfigurable(slot.kind)) return false;
+    setDraft(copySlot(slot));
+    return true;
+  };
+
+  const commitDrop = (patch: WheelPatch<ActionPoolId>) => {
+    const prepared = preparedSlots.current;
+    preparedSlots.current = new Map();
+    void update(patchForDrop(s.actionWheel, patch, prepared));
+  };
+
+  const issue = draft ? validateActionConfig(draft) : null;
+  const needsPath = draft?.kind === 'openApp' || draft?.kind === 'openFile' || draft?.kind === 'openFolder';
+  const needsVolume = draft?.kind === 'volumeUp' || draft?.kind === 'volumeDown';
 
   return (
     <>
@@ -83,35 +178,66 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
         wheelItems={wheelItems}
         defaults={{ wheel: DEFAULT_ACTION_WHEEL.map((a) => a.id), center: DEFAULT_ACTION_WHEEL[0].id }}
         labels={{ title: t.actionWheelTitle, desc: t.actionWheelDesc(key), poolTitle: t.actionLibrary, poolDesc: t.actionLibraryDesc }}
-        onChange={(patch) => void update(patchForDrop(s.actionWheel, patch))}
-        onSelectTarget={(id) => setSelected(id)}
+        onBeforeApply={prepareActionDrop}
+        onChange={commitDrop}
+        onEditTarget={editExistingSlot}
         showCenter={false}
-        onPreview={(id) => setSelected(id)}
+        onPreview={() => undefined}
       />
-      {selectedSlot ? (
-        <div className="card actionEditor">
-          <div className="lbl">{t.actionEditTitle(selectedSlot.label)}<span className="desc">{t.actionEditDesc}</span></div>
-          <Input value={selectedSlot.label} onChange={(_, d) => updateSlot({ label: d.value })} />
-          {selectedSlot.kind === 'openUrl' ? (
-            <Input value={selectedSlot.params?.url ?? ''} aria-label={t.actionUrl}
-              onChange={(_, d) => updateSlot({ params: { url: d.value } })} />
-          ) : null}
-          {selectedSlot.kind === 'openApp' || selectedSlot.kind === 'openFile' || selectedSlot.kind === 'openFolder' ? (
-            <div className="actionPathRow">
-              <Input value={selectedSlot.params?.path ?? ''} onChange={(_, d) => updateSlot({ params: { path: d.value } })} />
-              <Button
-                icon={selectedSlot.kind === 'openFolder' ? <Folder24Regular /> : <Apps24Regular />}
-                onClick={async () => {
-                  const picked = selectedSlot.kind === 'openFolder' ? await api.pickFolder() : await api.pickFile();
-                  if (picked) updateSlot({ params: { path: picked } });
-                }}
-              >
-                {t.browse}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <Dialog open={draft !== null} onOpenChange={(_, data) => { if (!data.open) closeConfig(null); }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{draft ? t.actionEditTitle(draft.label) : t.actionLibrary}</DialogTitle>
+            <DialogContent>
+              <div className="actionConfigDialog">
+                <span className="desc">{t.actionEditDesc}</span>
+                <Field label={t.actionLabel}>
+                  <Input value={draft?.label ?? ''} onChange={(_, data) => updateDraft({ label: data.value })} />
+                </Field>
+                {draft?.kind === 'openUrl' ? (
+                  <Field label={t.actionUrl} validationState={issue === 'url' ? 'error' : 'none'} validationMessage={issueMessage(issue === 'url' ? issue : null, t)}>
+                    <Input value={draft.params?.url ?? ''} onChange={(_, data) => updateDraftParams({ url: data.value })} />
+                  </Field>
+                ) : null}
+                {needsPath ? (
+                  <Field label={t.actionPath} validationState={issue === 'path' ? 'error' : 'none'} validationMessage={issueMessage(issue === 'path' ? issue : null, t)}>
+                    <div className="actionPathRow">
+                      <Input value={draft?.params?.path ?? ''} onChange={(_, data) => updateDraftParams({ path: data.value })} />
+                      <Button
+                        icon={draft?.kind === 'openFolder' ? <Folder24Regular /> : <Apps24Regular />}
+                        onClick={async () => {
+                          if (!draft) return;
+                          const picked = draft.kind === 'openFolder' ? await api.pickFolder() : await api.pickFile();
+                          if (picked) updateDraftParams({ path: picked });
+                        }}
+                      >
+                        {t.browse}
+                      </Button>
+                    </div>
+                  </Field>
+                ) : null}
+                {needsVolume ? (
+                  <Field label={t.actionVolumeStep} validationState={issue === 'volumeStep' ? 'error' : 'none'}
+                    validationMessage={issueMessage(issue === 'volumeStep' ? issue : null, t)}>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      step={1}
+                      value={String(draft?.params?.volumeStep ?? '')}
+                      onChange={(_, data) => updateDraftParams({ volumeStep: Number(data.value) })}
+                    />
+                  </Field>
+                ) : null}
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => closeConfig(null)}>{t.actionConfigCancel}</Button>
+              <Button appearance="primary" disabled={issue !== null} onClick={saveConfig}>{t.actionConfigSave}</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
   );
 }

@@ -16,7 +16,6 @@ describe('action model', () => {
     expect(ACTION_TEMPLATES.map((a) => a.kind)).toEqual([
       'screenshot', 'showDesktop', 'lockScreen', 'muteToggle', 'volumeUp', 'volumeDown',
       'openBrowser', 'openUrl', 'openApp', 'openFile', 'openFolder',
-      'openDownloads', 'openDesktop', 'openHome',
     ]);
   });
 
@@ -48,6 +47,36 @@ describe('action model', () => {
     expect(wheel[0]).toMatchObject({ kind: 'screenshot', label: 'Shot' });
     expect(wheel[1]).toMatchObject({ kind: 'openUrl', label: 'Open website', params: {} });
     expect(wheel[2]).toMatchObject(DEFAULT_ACTION_WHEEL[2]);
+  });
+
+  it('normalizes volume action steps', () => {
+    expect(normalizeActionSlot({
+      id: 'louder',
+      kind: 'volumeUp',
+      label: 'More',
+      icon: 'volume-up',
+      params: { volumeStep: 4 },
+    }, 0)).toEqual({
+      id: 'louder',
+      kind: 'volumeUp',
+      label: 'More',
+      icon: 'volume-up',
+      params: { volumeStep: 4 },
+    });
+    expect(normalizeActionSlot({
+      id: 'quiet',
+      kind: 'volumeDown',
+      label: 'Less',
+      icon: 'volume-down',
+      params: { volumeStep: 99 },
+    }, 0).params).toEqual({ volumeStep: 10 });
+    expect(normalizeActionSlot({
+      id: 'bad',
+      kind: 'volumeUp',
+      label: 'Bad',
+      icon: 'volume-up',
+      params: { volumeStep: 'x' },
+    }, 0).params).toEqual({ volumeStep: 1 });
   });
 
   it('repairs duplicate ids without reusing an existing repaired id', () => {

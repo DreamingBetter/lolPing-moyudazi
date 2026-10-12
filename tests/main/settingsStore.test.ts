@@ -27,8 +27,9 @@ describe('SettingsStore', () => {
   it('saves the defaults it filled in, so the tag colour stays the same on the next launch', async () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 })); // a 0.2.1 file: no room keys
-    const first = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 3 }).load();
-    await sleep(80);
+    const firstStore = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 3 });
+    const first = firstStore.load();
+    await firstStore.flush();
     const second = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 6 }).load();
     expect([first.tagColor, second.tagColor]).toEqual([3, 3]);
     expect(second.volume).toBe(30);
@@ -36,8 +37,9 @@ describe('SettingsStore', () => {
 
   it('saves on the very first run too', async () => {
     const dir = tempDir();
-    new SettingsStore(dir, 10, 'win', { name: 'darren', color: 2 }).load();
-    await sleep(80);
+    const store = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 2 });
+    store.load();
+    await store.flush();
     expect(new SettingsStore(dir, 10, 'win', { name: 'darren', color: 7 }).load().tagColor).toBe(2);
   });
 
@@ -91,11 +93,11 @@ describe('SettingsStore', () => {
     expect(store.actionKeyClashed).toBe(true);
   });
 
-  it('does not flag an action key filled in for an older file', () => {
+  it('does not flag the default action key filled in for an older file', () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ trigger: 'win', emoteTrigger: 'ctrl' }));
     const store = new SettingsStore(dir);
-    expect(store.load().actionTrigger).toBe('off');
+    expect(store.load().actionTrigger).toBe('shift');
     expect(store.actionKeyClashed).toBe(false);
   });
 
@@ -115,8 +117,9 @@ describe('SettingsStore', () => {
   it('saves the emote fields it filled in for an older file', async () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 }));
-    new SettingsStore(dir, 10).load();
-    await sleep(80);
+    const store = new SettingsStore(dir, 10);
+    store.load();
+    await store.flush();
     expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))).toMatchObject({ emoteTrigger: 'ctrl', emoteSizePx: 150, customEmotes: [] });
   });
 

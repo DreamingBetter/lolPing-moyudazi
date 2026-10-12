@@ -74,9 +74,9 @@ describe('settings IPC', () => {
     expect(result).toMatchObject({
       ok: false,
       error: 'The ping trigger, emote key and action key must be different, and custom wheel keys cannot be the pause shortcut key.',
-      settings: { actionTrigger: 'win' },
+      settings: { actionTrigger: 'shift' },
     });
-    expect(store.get().actionTrigger).toBe('win');
+    expect(store.get().actionTrigger).toBe('shift');
   });
 
   it('imports an emote: the files are saved and the entry is added', async () => {

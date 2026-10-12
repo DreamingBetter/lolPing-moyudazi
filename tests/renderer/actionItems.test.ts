@@ -9,7 +9,7 @@ describe('action editor items', () => {
     const library = actionLibraryItems(t);
     const wheel = actionWheelItems(DEFAULT_ACTION_WHEEL, t);
 
-    expect(library).toHaveLength(14);
+    expect(library).toHaveLength(11);
     expect(new Set(library.map((item) => item.id)).size).toBe(library.length);
     expect(library.every((item) => item.id.startsWith('template:'))).toBe(true);
     expect(wheel).toHaveLength(8);

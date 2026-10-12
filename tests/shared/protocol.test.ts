@@ -40,7 +40,7 @@ describe('commands', () => {
     expect(configCommand(DEFAULT_SETTINGS, true)).toEqual({
       type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false,
       emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false, dragThresholdPx: 8,
-      actionTrigger: 'win', actionTriggerVk: 0, toggleMods: 3, toggleVk: 0x50, enabled: true,
+      actionTrigger: 'shift', actionTriggerVk: 0, toggleMods: 3, toggleVk: 0x50, enabled: true,
     });
   });
 

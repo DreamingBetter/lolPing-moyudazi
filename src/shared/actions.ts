@@ -1,11 +1,14 @@
 export type ActionKind =
   | 'screenshot' | 'showDesktop' | 'lockScreen' | 'muteToggle' | 'volumeUp' | 'volumeDown'
-  | 'openBrowser' | 'openUrl' | 'openApp' | 'openFile' | 'openFolder'
-  | 'openDownloads' | 'openDesktop' | 'openHome';
+  | 'openBrowser' | 'openUrl' | 'openApp' | 'openFile' | 'openFolder';
 
 export type ActionIcon =
   | 'screenshot' | 'desktop' | 'lock' | 'mute' | 'volume-up' | 'volume-down'
-  | 'browser' | 'web' | 'app' | 'file' | 'folder' | 'downloads' | 'home';
+  | 'browser' | 'web' | 'app' | 'file' | 'folder';
+
+export const VOLUME_STEP_MIN = 1;
+export const VOLUME_STEP_MAX = 10;
+export const DEFAULT_VOLUME_STEP = 1;
 
 export interface ActionSlot {
   id: string;
@@ -15,6 +18,7 @@ export interface ActionSlot {
   params?: {
     url?: string;
     path?: string;
+    volumeStep?: number;
   };
 }
 
@@ -23,16 +27,13 @@ export const ACTION_TEMPLATES: readonly ActionSlot[] = [
   { id: 'tpl-showDesktop', kind: 'showDesktop', label: 'Show desktop', icon: 'desktop' },
   { id: 'tpl-lockScreen', kind: 'lockScreen', label: 'Lock screen', icon: 'lock' },
   { id: 'tpl-muteToggle', kind: 'muteToggle', label: 'Mute/unmute', icon: 'mute' },
-  { id: 'tpl-volumeUp', kind: 'volumeUp', label: 'Volume up', icon: 'volume-up' },
-  { id: 'tpl-volumeDown', kind: 'volumeDown', label: 'Volume down', icon: 'volume-down' },
+  { id: 'tpl-volumeUp', kind: 'volumeUp', label: 'Volume up', icon: 'volume-up', params: { volumeStep: DEFAULT_VOLUME_STEP } },
+  { id: 'tpl-volumeDown', kind: 'volumeDown', label: 'Volume down', icon: 'volume-down', params: { volumeStep: DEFAULT_VOLUME_STEP } },
   { id: 'tpl-openBrowser', kind: 'openBrowser', label: 'Open browser', icon: 'browser' },
   { id: 'tpl-openUrl', kind: 'openUrl', label: 'Open website', icon: 'web', params: {} },
   { id: 'tpl-openApp', kind: 'openApp', label: 'Open app', icon: 'app', params: {} },
   { id: 'tpl-openFile', kind: 'openFile', label: 'Open file', icon: 'file', params: {} },
   { id: 'tpl-openFolder', kind: 'openFolder', label: 'Open folder', icon: 'folder', params: {} },
-  { id: 'tpl-openDownloads', kind: 'openDownloads', label: 'Open Downloads', icon: 'downloads' },
-  { id: 'tpl-openDesktop', kind: 'openDesktop', label: 'Open Desktop', icon: 'desktop' },
-  { id: 'tpl-openHome', kind: 'openHome', label: 'Open Home', icon: 'home' },
 ];
 
 export const DEFAULT_ACTION_WHEEL: readonly ActionSlot[] = [
@@ -62,6 +63,11 @@ const cleanText = (v: unknown, fallback: string): string => {
   return s.length > 0 ? s.slice(0, 40) : fallback;
 };
 
+export const normalizeVolumeStep = (v: unknown): number => {
+  const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : DEFAULT_VOLUME_STEP;
+  return Math.min(VOLUME_STEP_MAX, Math.max(VOLUME_STEP_MIN, n));
+};
+
 export const isActionKind = (v: unknown): v is ActionKind => typeof v === 'string' && KINDS.has(v as ActionKind);
 
 export const actionIconUrl = (icon: ActionIcon): string => `../actions/${icon}.svg`;
@@ -84,6 +90,7 @@ export function normalizeActionSlot(raw: unknown, index: number): ActionSlot {
   if (raw.kind === 'openApp' || raw.kind === 'openFile' || raw.kind === 'openFolder') {
     slot.params = typeof params.path === 'string' ? { path: params.path.trim() } : {};
   }
+  if (raw.kind === 'volumeUp' || raw.kind === 'volumeDown') slot.params = { volumeStep: normalizeVolumeStep(params.volumeStep) };
   return slot;
 }
 

@@ -4,7 +4,7 @@
 
 lolPing is an Electron + TypeScript desktop app that recreates the League of Legends ping/emote wheel on the desktop. It uses a native helper process to capture global input, transparent always-on-top overlay windows to render wheels and effects, and a Fluent UI settings window for configuration.
 
-The planned second-development direction is to evolve the wheel from a game-style ping/emote toy into a configurable desktop shortcut wheel for office work, desktop operations, and light entertainment.
+The planned second-development direction is to evolve the wheel from a game-style ping/emote toy into a configurable desktop shortcut wheel for office work and desktop operations.
 
 ## Current Product Direction
 
@@ -20,6 +20,9 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Initial action wheel scope is:
   - Quick launch: apps, websites, files, and folders.
   - Desktop operations: screenshots, lock screen, mute/volume, show desktop, and similar system actions.
+- Do not add dedicated "open Desktop", "open Downloads", or "open user folder" actions; users can cover those with the configurable "open folder" action.
+- Show Desktop should use the Windows Shell `ToggleDesktop()` path rather than injecting Win + D, which can be swallowed by trigger-key state.
+- Volume up/down actions are configurable actions with a `volumeStep` integer from 1 to 10; execution repeats the system media key by that step.
 - Ship the action wheel with a sensible default 8-slot layout:
   - Screenshot
   - Mute/unmute
@@ -29,9 +32,9 @@ The planned second-development direction is to evolve the wheel from a game-styl
   - Open a configurable website
   - Open a configurable app
   - Open a configurable folder
-- Users must be able to edit every action wheel slot.
+- Users must be able to edit every parameterized action wheel slot.
 - Provide more built-in action options than the default 8 so users can replace slots without needing to create everything from scratch.
-- The action wheel editor should combine drag-and-drop and parameter editing: drag actions from the built-in library onto wheel slots, and click a slot/action to edit parameters such as URL, app path, file path, or folder path.
+- The action wheel editor should combine drag-and-drop and modal parameter editing: drag actions from the built-in library onto wheel slots; actions that need details open a modal and are placed only after valid configuration. Do not use a permanent configuration panel under the wheel. Click an existing parameterized slot to edit parameters such as URL, app path, file path, folder path, or volume step.
 - Action library entries and wheel slots should expose a concise localized description on hover. Keep the visible label short, and make parameter requirements clear in the description.
 - The overlay should only render the action wheel and report the selected action. Execute actions in the Electron main process so opening apps/files/URLs and system operations stay behind the main-process boundary.
 - Do not add a separate entertainment wheel for now; the existing ping and emote wheels cover expressive/fun use cases.

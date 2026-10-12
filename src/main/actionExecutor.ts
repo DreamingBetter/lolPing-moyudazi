@@ -1,4 +1,4 @@
-import type { ActionSlot } from '../shared/actions';
+import { normalizeVolumeStep, type ActionSlot } from '../shared/actions';
 import type { Platform } from '../shared/platform';
 
 export type ActionFailureReason = 'missingConfig' | 'invalidUrl' | 'pathMissing' | 'openFailed' | 'unsupported';
@@ -10,11 +10,8 @@ export interface ActionExecutorDeps {
   openExternal(url: string): Promise<void>;
   openPath(path: string): Promise<string>;
   run(command: string, args: string[]): Promise<void>;
-  writeClipboard(text: string): void;
   injectKeys(keys: number[]): void;
   exists(path: string): boolean;
-  now(): Date;
-  paths: { home: string; desktop: string; downloads: string };
 }
 
 const pathParam = (slot: ActionSlot): string | null => {
@@ -42,6 +39,11 @@ async function openPath(path: string, deps: ActionExecutorDeps): Promise<ActionR
   return error ? { ok: false, reason: 'openFailed', message: error } : { ok: true };
 }
 
+function injectMediaKey(keys: number[], slot: ActionSlot, deps: ActionExecutorDeps): void {
+  const count = normalizeVolumeStep(slot.params?.volumeStep);
+  for (let i = 0; i < count; i += 1) deps.injectKeys(keys);
+}
+
 export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps): Promise<ActionResult> {
   const windowsOnly: readonly ActionSlot['kind'][] = ['screenshot', 'showDesktop', 'lockScreen', 'muteToggle', 'volumeUp', 'volumeDown'];
   if (deps.platform !== 'win' && windowsOnly.includes(slot.kind)) return { ok: false, reason: 'unsupported' };
@@ -51,7 +53,7 @@ export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps):
       deps.injectKeys([0x5b, 0x10, 0x53]);
       return { ok: true };
     case 'showDesktop':
-      deps.injectKeys([0x5b, 0x44]);
+      await deps.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', '(New-Object -ComObject Shell.Application).ToggleDesktop()']);
       return { ok: true };
     case 'lockScreen':
       await deps.run('rundll32.exe', ['user32.dll,LockWorkStation']);
@@ -60,10 +62,10 @@ export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps):
       deps.injectKeys([0xad]);
       return { ok: true };
     case 'volumeUp':
-      deps.injectKeys([0xaf]);
+      injectMediaKey([0xaf], slot, deps);
       return { ok: true };
     case 'volumeDown':
-      deps.injectKeys([0xae]);
+      injectMediaKey([0xae], slot, deps);
       return { ok: true };
     case 'openBrowser':
       await deps.openDefaultBrowser();
@@ -82,11 +84,5 @@ export async function executeAction(slot: ActionSlot, deps: ActionExecutorDeps):
       const path = pathParam(slot);
       return path ? openPath(path, deps) : { ok: false, reason: 'missingConfig' };
     }
-    case 'openDownloads':
-      return openPath(deps.paths.downloads, deps);
-    case 'openDesktop':
-      return openPath(deps.paths.desktop, deps);
-    case 'openHome':
-      return openPath(deps.paths.home, deps);
   }
 }

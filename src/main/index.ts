@@ -279,11 +279,8 @@ function start(): void {
       openExternal: (url) => shell.openExternal(url),
       openPath: (path) => shell.openPath(path),
       run: runDetached,
-      writeClipboard: (value) => clipboard.writeText(value),
       injectKeys: (keys) => bridge.injectKeys(keys),
       exists: existsSync,
-      now: () => new Date(),
-      paths: { home: app.getPath('home'), desktop: app.getPath('desktop'), downloads: app.getPath('downloads') },
     }).then((result) => {
       if (result.ok) return;
       const t = text();

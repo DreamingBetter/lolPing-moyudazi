@@ -13,11 +13,8 @@ beforeEach(() => {
     openExternal: vi.fn(async () => undefined),
     openPath: vi.fn(async () => ''),
     run: vi.fn(async () => undefined),
-    writeClipboard: vi.fn(),
     injectKeys: vi.fn(),
     exists: vi.fn(() => true),
-    now: () => new Date(2026, 9, 10, 8, 9, 0),
-    paths: { home: 'C:\\Users\\me', desktop: 'C:\\Users\\me\\Desktop', downloads: 'C:\\Users\\me\\Downloads' },
   };
 });
 
@@ -55,31 +52,26 @@ describe('executeAction', () => {
       .resolves.toEqual({ ok: false, reason: 'openFailed', message: 'Access denied' });
   });
 
-  it('injects Windows shortcut keys for desktop operations', async () => {
+  it('uses Windows shell for show desktop and injects shortcut keys for other desktop operations', async () => {
     await executeAction(slot('screenshot'), deps);
     await executeAction(slot('showDesktop'), deps);
     await executeAction(slot('muteToggle'), deps);
-    await executeAction(slot('volumeUp'), deps);
-    await executeAction(slot('volumeDown'), deps);
     expect(deps.injectKeys).toHaveBeenCalledWith([0x5b, 0x10, 0x53]);
-    expect(deps.injectKeys).toHaveBeenCalledWith([0x5b, 0x44]);
+    expect(deps.run).toHaveBeenCalledWith('powershell.exe', expect.arrayContaining(['(New-Object -ComObject Shell.Application).ToggleDesktop()']));
     expect(deps.injectKeys).toHaveBeenCalledWith([0xad]);
-    expect(deps.injectKeys).toHaveBeenCalledWith([0xaf]);
-    expect(deps.injectKeys).toHaveBeenCalledWith([0xae]);
+  });
+
+  it('repeats volume media keys according to the configured step', async () => {
+    await executeAction(slot('volumeUp', { volumeStep: 3 }), deps);
+    await executeAction(slot('volumeDown', { volumeStep: 2 }), deps);
+    const keys = vi.mocked(deps.injectKeys).mock.calls.map(([call]) => call[0]);
+    expect(keys.filter((key) => key === 0xaf)).toHaveLength(3);
+    expect(keys.filter((key) => key === 0xae)).toHaveLength(2);
   });
 
   it('locks the workstation on Windows', async () => {
     await expect(executeAction(slot('lockScreen'), deps)).resolves.toEqual({ ok: true });
     expect(deps.run).toHaveBeenCalledWith('rundll32.exe', ['user32.dll,LockWorkStation']);
-  });
-
-  it('opens known user folders', async () => {
-    await executeAction(slot('openDownloads'), deps);
-    await executeAction(slot('openDesktop'), deps);
-    await executeAction(slot('openHome'), deps);
-    expect(deps.openPath).toHaveBeenCalledWith('C:\\Users\\me\\Downloads');
-    expect(deps.openPath).toHaveBeenCalledWith('C:\\Users\\me\\Desktop');
-    expect(deps.openPath).toHaveBeenCalledWith('C:\\Users\\me');
   });
 
   it('returns unsupported for Windows-only actions on macOS', async () => {

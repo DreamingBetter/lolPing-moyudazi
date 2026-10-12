@@ -43,6 +43,10 @@ interface Props<T extends string> {
   onDropFiles?: (files: File[]) => void;
   /** Called when a wheel slot or centre is clicked for selection rather than as the drop target of a picked item. */
   onSelectTarget?: (id: T, target: WheelTarget) => void;
+  /** Gives a section a chance to validate or rewrite a drop before the wheel state is saved. */
+  onBeforeApply?: (src: WheelSource<T>, target: WheelTarget, patch: WheelPatch<T>) => WheelPatch<T> | null | Promise<WheelPatch<T> | null>;
+  /** Returns true when the click was handled by an external editor and the item should not be picked up. */
+  onEditTarget?: (id: T, target: WheelTarget) => boolean;
   showCenter?: boolean;
   onChange: (patch: WheelPatch<T>) => void;
   onPreview: (id: T) => void;
@@ -56,7 +60,8 @@ const activate = (fn: () => void) => (e: KeyboardEvent) => {
 };
 
 export function WheelEditor<T extends string>({
-  wheel, center, centerOn, trigger, pool, wheelItems, defaults, labels, poolExtra, onDropFiles, onSelectTarget, showCenter = true, onChange, onPreview,
+  wheel, center, centerOn, trigger, pool, wheelItems, defaults, labels, poolExtra, onDropFiles, onSelectTarget, onBeforeApply, onEditTarget,
+  showCenter = true, onChange, onPreview,
 }: Props<T>) {
   const t = useText();
   const [picked, setPicked] = useState<WheelSource<T> | null>(null);
@@ -72,18 +77,25 @@ export function WheelEditor<T extends string>({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const apply = (src: WheelSource<T>, target: WheelTarget) => {
+  const apply = async (src: WheelSource<T>, target: WheelTarget) => {
     const patch = dropPatch(wheel, center, src, target);
-    if (patch) onChange(patch);
+    if (patch) {
+      const next = onBeforeApply ? await onBeforeApply(src, target, patch) : patch;
+      if (next) onChange(next);
+    }
     setPicked(null);
   };
 
   /** Click on a slot or the centre: place the picked item there, or pick up what's there. */
   const clickTarget = (target: WheelTarget, here: WheelSource<T>) => {
+    if (picked) {
+      void apply(picked, target);
+      return;
+    }
     const selected = clickTargetSelection(picked, here);
     if (selected !== null) onSelectTarget?.(selected, target);
-    if (picked) apply(picked, target);
-    else setPicked(here);
+    if (onEditTarget?.(here.id, target)) return;
+    setPicked(here);
   };
 
   const dragProps = (src: WheelSource<T>) => ({
@@ -109,7 +121,7 @@ export function WheelEditor<T extends string>({
     onDrop: (e: DragEvent) => {
       e.preventDefault();
       setHot(null);
-      if (drag.current) apply(drag.current, target);
+      if (drag.current) void apply(drag.current, target);
       drag.current = null;
     },
   });

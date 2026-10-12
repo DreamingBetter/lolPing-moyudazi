@@ -44,8 +44,12 @@ describe('language', () => {
     }
     expect(en.actionDescriptions.openUrl).toContain('configured');
     expect(en.actionDescriptions.openApp).toContain('configured');
+    expect(en.actionDescriptions.volumeUp).toContain('step');
+    expect(en.actionDescriptions.volumeDown).toContain('step');
     expect(zh.actionDescriptions.openUrl).toContain('配置');
     expect(zh.actionDescriptions.openApp).toContain('配置');
+    expect(zh.actionDescriptions.volumeUp).toContain('步进');
+    expect(zh.actionDescriptions.volumeDown).toContain('步进');
   });
 
   it('has the same Mac wording in both languages', () => {
