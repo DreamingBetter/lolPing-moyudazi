@@ -94,6 +94,10 @@ function sanitizeChatTextRaw(raw: string): string {
   return raw.replace(UNSAFE_CHAT_CHARS, '').replace(/\r\n?/g, '\n').trim();
 }
 
+export function isChatTextTooLong(raw: string): boolean {
+  return [...sanitizeChatTextRaw(raw)].length > CHAT_TEXT_MAX_CODE_POINTS;
+}
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isUint = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 const isUnit = (v: unknown): v is number => typeof v === 'number' && v >= 0 && v <= 1;

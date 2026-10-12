@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
 import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
+import type { RoomChatState } from '../../src/shared/roomChat';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
 
@@ -25,6 +26,17 @@ class Remote {
   emote(extra: Record<string, unknown> = {}): void {
     this.lan.deliver(this.key, this.packet({ t: 'emote', e: 'gg', d: 1, x: 0.5, y: 0.25, ...extra }));
   }
+  chat(text: string, extra: Record<string, unknown> = {}): void {
+    this.lan.deliver(this.key, this.packet({
+      t: 'chat', id: `c${this.peer}`.slice(0, 32).padEnd(32, '0'), text, ...extra,
+    }));
+  }
+  historyRequest(request = 'fedcba9876543210fedcba9876543210'): void {
+    this.lan.deliver(this.key, this.packet({ t: 'chatHistoryRequest', request }));
+  }
+  history(request: string, part: number, total: number, messages: unknown[]): void {
+    this.lan.deliver(this.key, this.packet({ t: 'chatHistory', request, part, total, messages }));
+  }
   bye(): void {
     this.lan.deliver(this.key, this.packet({ t: 'bye' }));
   }
@@ -37,6 +49,7 @@ let pings: RemotePing[];
 let emotes: RemoteEmote[];
 let toasts: RoomToast[];
 let saved: (string | null)[];
+let chats: RoomChatState[];
 
 function sentMessages(to?: string): RoomMessage[] {
   return lan.sent
@@ -57,6 +70,7 @@ beforeEach(() => {
   emotes = [];
   toasts = [];
   saved = [];
+  chats = [];
   room = new RoomManager({
     transports: [lan],
     now: () => Date.now(),
@@ -70,6 +84,7 @@ beforeEach(() => {
   room.on('remoteEmote', (p: RemoteEmote) => emotes.push(p));
   room.on('toast', (t: RoomToast) => toasts.push(t));
   room.on('saveCode', (c: string | null) => saved.push(c));
+  room.on('chatState', (s: RoomChatState) => chats.push(s));
 });
 
 afterEach(() => {
@@ -553,6 +568,113 @@ describe('two transports', () => {
     both.profileChanged();
     expect(lan.sent.map((s) => s.to).sort()).toEqual(['*', 'lan:a']);
     expect(net.sent.map((s) => s.to)).toEqual(['*']);
+  });
+});
+
+describe('chat', () => {
+  it('sends a local message with sending then sent state, independent of ping mute flags', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence({ name: 'Alex', color: 4 });
+    const before = chats.length;
+    room.setStatusFlags({ paused: true, roomMuted: true });
+    room.muteMember(alex.peer, true);
+    const result = room.sendChat('hello');
+    expect(result).toMatchObject({ ok: true });
+    expect(chats.slice(before).map((s) => s.messages.at(-1)?.status)).toEqual(['sending', 'sent']);
+    expect(room.chatState().messages).toMatchObject([{ text: 'hello', self: true, status: 'sent' }]);
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'chat')).toHaveLength(1);
+  });
+
+  it('accepts chat while alone and hands it to a later member', async () => {
+    await joinActive();
+    expect(room.sendChat('before Alex')).toMatchObject({ ok: true });
+    expect(room.chatState().messages).toHaveLength(1);
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence({ name: 'Alex' });
+    alex.historyRequest('0123456789abcdef0123456789abcdef');
+    expect(sentMessages('lan:alex').some((m) => m.t === 'chatHistory')).toBe(true);
+  });
+
+  it('rejects sends while idle or joining and validates text before adding a message', async () => {
+    expect(room.sendChat('hello')).toEqual({ ok: false, error: 'not-in-room' });
+    await room.join(formatRoomCode(CODE));
+    expect(room.sendChat('hello')).toEqual({ ok: false, error: 'not-in-room' });
+    await vi.advanceTimersByTimeAsync(3000);
+    for (const [text, error] of [['   ', 'empty'], ['x'.repeat(1001), 'too-long']] as const) {
+      expect(room.sendChat(text)).toEqual({ ok: false, error });
+    }
+    expect(room.chatState().messages).toEqual([]);
+  });
+
+  it('does not accept unknown chat senders and applies an independent incoming limit', async () => {
+    await joinActive();
+    const stranger = new Remote('1111111111111111', 'lan:stranger', lan);
+    stranger.chat('ignored');
+    expect(room.chatState().messages).toEqual([]);
+    const alex = new Remote('2222222222222222', 'lan:alex', lan);
+    alex.presence({ name: 'Alex' });
+    for (let i = 0; i < 12; i++) alex.chat(`message-${i}`, { id: i.toString(16).padStart(32, '0') });
+    expect(room.chatState().messages).toHaveLength(10);
+  });
+
+  it('retries a failed local message with the same ID', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence();
+    lan.emit('peerGone', alex.key);
+    const first = room.sendChat('retry me');
+    expect(first).toMatchObject({ ok: false, error: 'failed' });
+    const failed = room.chatState().messages[0];
+    expect(failed.status).toBe('failed');
+    alex.presence();
+    lan.sent = [];
+    const retried = room.retryChat(failed.id);
+    expect(retried).toEqual({ ok: true, id: failed.id });
+    expect(room.chatState().messages).toHaveLength(1);
+    expect(room.chatState().messages[0]).toMatchObject({ id: failed.id, status: 'sent' });
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'chat').map((m) => m.t === 'chat' && m.id)).toEqual([failed.id]);
+  });
+
+  it('deduplicates chat packets arriving twice and ignores ping/emote gates', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence();
+    const packet = alex.packet({ t: 'chat', id: '0123456789abcdef0123456789abcdef', text: 'once' });
+    room.setStatusFlags({ paused: true, roomMuted: true });
+    room.muteMember(alex.peer, true);
+    lan.deliver(alex.key, packet);
+    lan.deliver('lan:other', packet);
+    expect(room.chatState().messages).toMatchObject([{ text: 'once', self: false }]);
+  });
+
+  it('merges valid history parts from multiple responders, dedupes and keeps the latest 50', async () => {
+    await room.join(formatRoomCode(CODE));
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    const ben = new Remote('2222222222222222', 'lan:ben', lan);
+    alex.presence();
+    ben.presence();
+    const request = sentMessages('lan:alex').find((m) => m.t === 'chatHistoryRequest');
+    expect(request?.t).toBe('chatHistoryRequest');
+    if (request?.t !== 'chatHistoryRequest') return;
+    const ids = Array.from({ length: 51 }, (_, i) => (i + 1).toString(16).padStart(32, '0'));
+    const item = (id: string, peer: string, text: string) => ({ id, peer, ts: Number.parseInt(id.slice(-2), 16), name: peer === alex.peer ? 'Alex' : 'Ben', color: 2, text });
+    const chunks = Array.from({ length: 7 }, (_, i) => ids.slice(i * 8, i === 6 ? undefined : i * 8 + 8));
+    chunks.slice(0, 4).forEach((chunk, part) => alex.history(request.request, part, 4, chunk.map((id) => item(id, alex.peer, 'x'))));
+    chunks.slice(4).forEach((chunk, part) => ben.history(request.request, part, 3, chunk.map((id) => item(id, ben.peer, 'x'))));
+    ben.history(request.request, 0, 1, [item(ids[50], ben.peer, 'duplicate')]);
+    expect(room.chatState().messages).toHaveLength(50);
+    expect(new Set(room.chatState().messages.map((m) => m.id)).size).toBe(50);
+    expect(room.chatState().messages[0].id).toBe(ids[1]);
+  });
+
+  it('clears chat state when leaving the room', async () => {
+    await joinActive();
+    room.sendChat('gone on leave');
+    expect(room.chatState().messages).toHaveLength(1);
+    room.leave();
+    expect(room.chatState()).toEqual({ phase: 'idle', code: null, members: 0, messages: [] });
+    expect(chats.at(-1)).toEqual({ phase: 'idle', code: null, members: 0, messages: [] });
   });
 });
 
