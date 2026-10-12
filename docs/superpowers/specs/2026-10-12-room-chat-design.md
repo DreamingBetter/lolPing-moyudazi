@@ -1,7 +1,7 @@
 # Room Chat - Design Spec
 
 **Date:** 2026-10-12
-**Status:** Approved in brainstorming; awaiting written spec review
+**Status:** Approved in brainstorming and written spec review
 **Target:** Next room milestone
 **Builds on:** Existing room sharing, LAN and relay transports, room encryption, settings window navigation.
 
@@ -144,6 +144,8 @@ interface ChatHistoryRequestMsg extends Base {
 interface ChatHistoryMsg extends Base {
   t: 'chatHistory';
   request: string;
+  part: number;
+  total: number;
   messages: { id: string; peer: string; ts: number; name: string; color: number; text: string }[];
 }
 ```
@@ -152,8 +154,10 @@ Validation rules:
 
 - `id` and `request` are 32 lowercase hex characters, generated from 16 random bytes by main.
 - `text` is trimmed, must be non-empty, and is limited to 1000 code points.
+- A chat packet must also fit the existing 1200-byte sealed room-packet limit after UTF-8 encoding. Text that exceeds the byte budget is rejected as `too-long`, even when it is below the code-point limit.
 - Text sanitisation removes C0/C1 control characters, bidi controls, zero-width characters and line/paragraph separators that can hide or reorder UI text. Normal whitespace and newlines are allowed.
-- `chatHistory.messages` is capped at 200 items.
+- `part` is zero-based, `total` is 1 to 64, and each `part` is less than `total`.
+- A history response contains at most 200 messages in total, but is split into as many `chatHistory` packets as needed to fit the existing sealed-packet limit. The receiver merges all parts for the matching request and dedupes by message ID.
 - History items from unknown future shapes are dropped item-by-item; a malformed envelope is dropped as today.
 - Unknown extra fields are ignored.
 
@@ -191,13 +195,13 @@ On incoming `chat`:
 On incoming `chatHistoryRequest`:
 
 - If in a room, send one `chatHistory` response containing this client's latest 200 cached messages.
-- Response can go through the same routing logic as other shared room messages.
+- Split the response into packet-sized parts before sealing. Response parts go through the same routing logic as other shared room messages.
 - To avoid a joiner getting many duplicate histories, the joiner dedupes by ID. A later optimization can make only one peer answer, but that is not necessary for a room capped at 8 members.
 
 On incoming `chatHistory`:
 
 - Match the `request` ID against a recent local request.
-- Validate each item, dedupe by message ID, merge, sort by timestamp then stable ID.
+- Validate the part, collect it for the matching request, dedupe each item by message ID, merge available parts, sort by timestamp then stable ID.
 - Trim to 200 messages.
 - Push chat state.
 
