@@ -23,6 +23,7 @@ import {
   type ActionKind,
   type ActionSlot,
 } from '../../../shared/actions';
+import { actionDisplayName } from '../../../shared/actionDisplay';
 import { triggerLabel, type Settings } from '../../../shared/settings';
 import type { WheelPatch, WheelSource, WheelTarget } from '../../../shared/wheelLayout';
 import { api } from '../api';
@@ -193,13 +194,13 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
       <Dialog open={draft !== null} onOpenChange={(_, data) => { if (!data.open) closeConfig(null); }}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>{draft ? t.actionEditTitle(draft.label) : t.actionLibrary}</DialogTitle>
+            <DialogTitle>{draft ? t.actionEditTitle(actionDisplayName(draft, t)) : t.actionLibrary}</DialogTitle>
             <DialogContent>
               <div className="actionConfigDialog">
                 <span className="desc">{t.actionEditDesc}</span>
-                <Field label={t.actionLabel}>
+                {!needsVolume ? <Field label={t.actionLabel}>
                   <Input value={draft?.label ?? ''} onChange={(_, data) => updateDraft({ label: data.value })} />
-                </Field>
+                </Field> : null}
                 {draft?.kind === 'openUrl' ? (
                   <Field label={t.actionUrl} validationState={issue === 'url' ? 'error' : 'none'} validationMessage={issueMessage(issue === 'url' ? issue : null, t)}>
                     <Input value={draft.params?.url ?? ''} onChange={(_, data) => updateDraftParams({ url: data.value })} />

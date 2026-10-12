@@ -24,6 +24,8 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Browser actions should use the system default browser. Do not open `about:blank` through Electron `shell.openExternal`, because Windows does not route the `about:` scheme through the default browser picker. Use a normal `https://` start URL for the "open browser" action and user-configured `https://` URLs for "open website".
 - Show Desktop should use the Windows Shell `ToggleDesktop()` path rather than injecting Win + D, which can be swallowed by trigger-key state.
 - Volume up/down actions are configurable actions with a `volumeStep` that represents the intended Windows volume delta. Valid values are even numbers from 2 to 20; execution converts the delta to media-key presses by dividing by 2.
+- Volume action display names are derived from their configured delta, for example `Volume+2` / `音量+2` and `Volume-4` / `音量-4`; do not require users to edit a separate label for volume actions.
+- The action wheel overlay should show an action hint after hovering one slice for about 2 seconds. Pass localized action labels and descriptions from overlay settings rather than hard-coding English in the overlay.
 - Ship the action wheel with a sensible default 8-slot layout:
   - Screenshot
   - Mute/unmute

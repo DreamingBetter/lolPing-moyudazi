@@ -81,8 +81,8 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 @media (max-width: 860px) { .weBody { grid-template-columns: 1fr; justify-items: center; } }
 .actionConfigDialog { display: grid; gap: 12px; min-width: min(440px, calc(100vw - 96px)); }
 .actionPathRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.actionVolumeRow { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 10px; align-items: center; }
-.actionVolumeRow .fui-Slider { width: 100%; }
+.actionVolumeRow { display: flex; gap: 10px; align-items: center; justify-content: flex-start; }
+.actionVolumeRow .fui-Slider { width: 200px; }
 .rowError { margin: 1px 0 4px; padding: 0 20px 0 60px; font-size: 12px; line-height: 16px; color: #ff9c48; }
 .keys { display: flex; align-items: center; gap: 4px; }
 .keys kbd { font: 600 12px "Segoe UI"; padding: 3px 8px; border-radius: 4px; background: var(--colorBrandBackground); color: var(--colorNeutralForegroundOnBrand); }

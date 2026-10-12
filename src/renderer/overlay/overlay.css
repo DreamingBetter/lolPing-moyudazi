@@ -15,6 +15,11 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 #wheel .icon.hot, #emoteWheel .icon.hot, #actionWheel .icon.hot { filter: none; transform: scale(1.18); }
 #wheel .centerTxt, #emoteWheel .centerTxt, #actionWheel .centerTxt { font: 600 15px "Segoe UI", sans-serif; letter-spacing: 1px; fill: #1fa9e0; }
 #wheel .backTxt, #emoteWheel .backTxt, #actionWheel .backTxt { font: 600 9px "Segoe UI", sans-serif; fill: #6c7a7c; letter-spacing: .5px; }
+#wheel .hint, #emoteWheel .hint, #actionWheel .hint { opacity: 0; transition: opacity .14s ease-out; pointer-events: none; }
+#wheel .hint.show, #emoteWheel .hint.show, #actionWheel .hint.show { opacity: 1; }
+#wheel .hintBox, #emoteWheel .hintBox, #actionWheel .hintBox { fill: rgba(8, 12, 16, .82); stroke: rgba(200, 170, 110, .6); stroke-width: 1; }
+#wheel .hintLabel, #emoteWheel .hintLabel, #actionWheel .hintLabel { fill: #f4e7c1; font: 700 15px "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+#wheel .hintDesc, #emoteWheel .hintDesc, #actionWheel .hintDesc { fill: rgba(255, 255, 255, .75); font: 600 11px "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 /* Emote art is square: draw it round, like the League emote wheel. It keeps its own colours (only ping icons are tinted
    until hovered), so the hot slice shows by its wedge and the larger icon. */
 #emoteWheel .icon, #emoteWheel .hub { clip-path: circle(50%); }

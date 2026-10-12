@@ -24,4 +24,14 @@ describe('action editor items', () => {
     expect(builtIn.name).toBe(t.actionNames.screenshot);
     expect(customItem.name).toBe('Work capture');
   });
+
+  it('shows configured volume actions by their actual volume delta', () => {
+    const t = strings('zh-CN');
+    const items = actionWheelItems([
+      { id: 'up', kind: 'volumeUp', label: 'Volume up', icon: 'volume-up', params: { volumeStep: 6 } },
+      { id: 'down', kind: 'volumeDown', label: 'Volume down', icon: 'volume-down', params: { volumeStep: 4 } },
+    ], t);
+
+    expect(items.map((item) => item.name)).toEqual(['音量+6', '音量-4']);
+  });
 });

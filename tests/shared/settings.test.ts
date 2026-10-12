@@ -425,7 +425,8 @@ describe('helpers', () => {
       pingSizePx: 110, pingDurationS: 3.2, volume: 70, muted: false, tickSound: true,
       wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
-      actionWheel: DEFAULT_ACTION_WHEEL,
+      language: 'auto',
+      actionWheel: DEFAULT_SETTINGS.actionWheel,
     });
   });
 
