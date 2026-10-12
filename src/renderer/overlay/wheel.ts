@@ -32,6 +32,8 @@ interface WheelOptions {
   hintDelayMs?: number;
 }
 
+const DEFAULT_HINT_DELAY_MS = 1500;
+
 /**
  * The League-style wheel (see prototype/wheel-demo.html), for pings or emotes: the slices are whatever items it is given.
  * Each wheel draws into its own svg, whose id keeps its gradient ids apart from the other wheel's.
@@ -125,8 +127,7 @@ export class Wheel {
   }
 
   private queueHint(i: number): void {
-    const delay = this.options.hintDelayMs;
-    if (delay === undefined) return;
+    const delay = this.options.hintDelayMs ?? DEFAULT_HINT_DELAY_MS;
     this.hintTimer = setTimeout(() => {
       if (this.opened && this.hot === i) this.showHint(this.items[i]);
     }, delay);

@@ -64,16 +64,16 @@ afterEach(() => {
 });
 
 describe('Wheel', () => {
-  it('shows an item hint only after hovering the same slice for two seconds', () => {
+  it('shows an item hint after hovering the same slice for 1.5 seconds', () => {
     const svg = new FakeSvgElement('svg', 'actionWheel') as unknown as SVGSVGElement;
-    const wheel = new Wheel(svg, 'ACTION', '../actions/app.svg', () => undefined, { hintDelayMs: 2000 });
+    const wheel = new Wheel(svg, 'ACTION', '../actions/app.svg', () => undefined);
     wheel.setItems([{ key: 'volume', icon: '../actions/volume-up.svg', label: '音量+6', description: '按配置的音量步进提高系统音量' }]);
 
     wheel.open(100, 100);
     wheel.move(100, -50);
     expect((svg as unknown as FakeSvgElement).findByClass('hint').at(0)?.classList.contains('show')).toBe(false);
 
-    vi.advanceTimersByTime(1999);
+    vi.advanceTimersByTime(1499);
     expect((svg as unknown as FakeSvgElement).findByClass('hint').at(0)?.classList.contains('show')).toBe(false);
 
     vi.advanceTimersByTime(1);

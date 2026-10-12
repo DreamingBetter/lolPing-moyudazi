@@ -44,7 +44,7 @@ const tick = (): void => {
 };
 const pingWheel = new Wheel(pingSvg, 'PING', textureUrl('generic_ping'), tick);
 const emoteWheel = new Wheel(emoteSvg, 'EMOTE', emoteIconUrl(DEFAULT_CLICK_EMOTE), tick);
-const actionWheel = new Wheel(actionSvg, 'ACTION', actionIconUrl('app'), tick, { hintDelayMs: 2000 });
+const actionWheel = new Wheel(actionSvg, 'ACTION', actionIconUrl('app'), tick);
 
 const pingItem = (p: PingDef): WheelItem => ({ key: p.id, icon: textureUrl(p.icon) });
 const text = () => strings(resolveLang(settings.language, navigator.language));

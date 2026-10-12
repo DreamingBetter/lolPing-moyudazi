@@ -192,7 +192,7 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
         onPreview={() => undefined}
       />
       <Dialog open={draft !== null} onOpenChange={(_, data) => { if (!data.open) closeConfig(null); }}>
-        <DialogSurface>
+        <DialogSurface className={needsVolume ? 'actionConfigSurface compact' : 'actionConfigSurface'}>
           <DialogBody>
             <DialogTitle>{draft ? t.actionEditTitle(actionDisplayName(draft, t)) : t.actionLibrary}</DialogTitle>
             <DialogContent>
