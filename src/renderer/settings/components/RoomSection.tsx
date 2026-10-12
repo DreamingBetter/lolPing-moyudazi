@@ -3,7 +3,7 @@ import {
   ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
   SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
 } from '@fluentui/react-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RoomMember, RoomState } from '../../../shared/room';
 import { TAG_COLORS } from '../../../shared/roomColors';
 import { clampNameInput } from '../../../shared/roomProtocol';
@@ -12,6 +12,7 @@ import { api } from '../api';
 import { useText } from '../text';
 import type { Update } from '../useAppState';
 import { useRoomState } from '../useRoomState';
+import { RoomJoinCard } from './RoomJoinCard';
 import { SettingRow, SwitchRow } from './rows';
 
 const { max: LIMIT_MAX } = LIMITS.incomingPingLimit;
@@ -31,50 +32,6 @@ function NameRow({ value, onSave }: { value: string; onSave(name: string): void 
       <Input value={draft} style={{ width: 190 }} onChange={(_, d) => setDraft(clampNameInput(d.value))} onBlur={save}
         onKeyDown={(e) => e.key === 'Enter' && save()} />
     </SettingRow>
-  );
-}
-
-function JoinCard() {
-  const t = useText();
-  const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const touched = useRef(false);
-  useEffect(() => {
-    void api.clipboardRoomCode().then((c) => {
-      if (c && !touched.current) setCode(c);
-    });
-  }, []);
-  const join = async () => {
-    setBusy(true);
-    const r = await api.joinRoom(code);
-    setBusy(false);
-    setError(r.ok ? null : r.error === 'mistyped' ? t.roomMistyped : r.error === 'failed' ? t.roomJoinFailed : t.roomInvalid);
-  };
-  return (
-    <div className="card roomJoin">
-      <span className="icon"><PeopleCommunity24Regular /></span>
-      <div className="lbl">
-        {t.roomJoinTitle}
-        <span className="desc">{t.roomJoinDesc}</span>
-        <span className="desc">{t.roomNetworkHint}</span>
-      </div>
-      <div className="ctl">
-        <Input placeholder="PING-XXXXX-XXXXX" value={code} style={{ width: 190 }}
-          onChange={(_, d) => {
-            touched.current = true;
-            setCode(d.value);
-            setError(null);
-          }}
-          onKeyDown={(e) => e.key === 'Enter' && void join()} />
-        <Button appearance="primary" disabled={busy || !code.trim()} onClick={() => void join()}>{t.roomJoin}</Button>
-        <Button disabled={busy} onClick={() => {
-          setBusy(true); // a double click would create a room and replace it at once
-          void api.createRoom().finally(() => setBusy(false));
-        }}>{t.roomCreate}</Button>
-      </div>
-      {error ? <div className="roomError">{error}</div> : null}
-    </div>
   );
 }
 
@@ -101,7 +58,7 @@ function MemberRow({ m }: { m: RoomMember }) {
   );
 }
 
-function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boolean }) {
+function InRoom({ room, allowInternet, onOpenChat }: { room: RoomState; allowInternet: boolean; onOpenChat(): void }) {
   const t = useText();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -124,6 +81,7 @@ function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boole
             void api.copyRoomCode();
             setCopied(true);
           }}>{copied ? t.roomCopied : t.roomCopy}</Button>
+          <Button onClick={onOpenChat}>{t.navChat}</Button>
           <Button onClick={() => void api.leaveRoom()}>{t.roomLeave}</Button>
         </div>
       </div>
@@ -162,7 +120,7 @@ function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boole
   );
 }
 
-export function RoomSection({ settings: s, update }: { settings: Settings; update: Update }) {
+export function RoomSection({ settings: s, update, onOpenChat }: { settings: Settings; update: Update; onOpenChat(): void }) {
   const t = useText();
   const room = useRoomState();
   if (!room) return null;
@@ -177,7 +135,7 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
           ))}
         </div>
       </SettingRow>
-      {room.phase === 'idle' ? <JoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} />}
+      {room.phase === 'idle' ? <RoomJoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} onOpenChat={onOpenChat} />}
       <SwitchRow icon={<SpeakerMute24Regular />} title={t.roomMute} description={t.roomMuteDesc}
         checked={s.roomMuted} onChange={(v) => void update({ roomMuted: v })} />
       <SettingRow icon={<TopSpeed24Regular />} title={t.roomLimit} description={t.roomLimitDesc} dim={s.roomMuted}>
