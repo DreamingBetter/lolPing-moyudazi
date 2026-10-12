@@ -12,6 +12,7 @@ export function actionLibraryItems(t: Strings): PoolItem<string>[] {
     id: `template:${slot.kind}`,
     icon: `../actions/${slot.icon}.svg`,
     name: t.actionNames[slot.kind],
+    description: t.actionDescriptions[slot.kind],
   }));
 }
 
@@ -20,5 +21,6 @@ export function actionWheelItems(wheel: readonly ActionSlot[], t: Strings): Pool
     id: slot.id,
     icon: `../actions/${slot.icon}.svg`,
     name: displayName(slot, t),
+    description: t.actionDescriptions[slot.kind],
   }));
 }

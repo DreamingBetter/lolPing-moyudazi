@@ -14,7 +14,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Preserve the existing ping wheel and emote wheel, and add the action wheel alongside them rather than merging everything into one wheel.
 - Use different trigger keys to open the ping, emote, and action wheels.
 - Reuse the project's existing wheel rendering and editor patterns for the action wheel. Do not rewrite the ping/emote wheels into a new unified wheel framework for the first milestone.
-- The action wheel's trigger key is user-configurable, following the existing project pattern for ping/emote triggers. Its default trigger should be Win + drag.
+- The action wheel's trigger key is user-configurable, following the existing project pattern for ping/emote triggers. Its default trigger should be Shift + drag on Windows because Win conflicts with system shortcuts.
 - The first action-wheel milestone is Windows-first. Desktop operations should be implemented and verified on Windows; macOS may keep compatibility hooks or show unsupported states for actions that are not implemented there yet.
 - The first screenshot action should invoke the Windows system snipping flow, equivalent to Win + Shift + S, rather than implementing custom screenshot capture.
 - Initial action wheel scope is:
@@ -32,6 +32,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Users must be able to edit every action wheel slot.
 - Provide more built-in action options than the default 8 so users can replace slots without needing to create everything from scratch.
 - The action wheel editor should combine drag-and-drop and parameter editing: drag actions from the built-in library onto wheel slots, and click a slot/action to edit parameters such as URL, app path, file path, or folder path.
+- Action library entries and wheel slots should expose a concise localized description on hover. Keep the visible label short, and make parameter requirements clear in the description.
 - The overlay should only render the action wheel and report the selected action. Execute actions in the Electron main process so opening apps/files/URLs and system operations stay behind the main-process boundary.
 - Do not add a separate entertainment wheel for now; the existing ping and emote wheels cover expressive/fun use cases.
 - Prefer a practical first milestone: one configurable action wheel with safe, obvious actions before adding advanced automation.
@@ -45,6 +46,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Add focused tests for settings normalization, wheel/action selection, and main-process action execution.
 - After each development round, provide a way for the user to see the result. Prefer `npm run dev` for fast iteration; use `npm run dist` to create a Windows installer only when the user needs an installable build or release-style testing.
 - For this Electron app, rebuilding the installer is not required for every code change. Rebuild the native helper with `npm run build:helper` when helper code changes, then run the app in development mode.
+- `npm run dist` builds the Windows installer. The script uses `tools/build-win.mjs`, which points electron-builder at the already-installed `node_modules/electron/dist` and defaults `ELECTRON_BUILDER_BINARIES_MIRROR` to the npmmirror electron-builder-binaries mirror when no mirror is already configured. This avoids two common local Windows issues: hanging while unpacking Electron from the default cache and timing out while downloading NSIS from GitHub.
 - On Windows dev machines where an installed lolPing instance has already used `%APPDATA%\lolPing`, start development with a separate Electron user-data directory to avoid cache and single-instance-lock conflicts:
   ```powershell
   $env:ELECTRON_CLI_ARGS='["--user-data-dir=C:\\Users\\DELL\\AppData\\Roaming\\lolPing-dev"]'

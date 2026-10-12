@@ -1,3 +1,4 @@
+import type { ActionKind } from './actions';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { MemberPath } from './room';
@@ -213,9 +214,23 @@ const en = {
     openDownloads: 'Open Downloads',
     openDesktop: 'Open Desktop',
     openHome: 'Open Home',
-    copyDate: 'Copy date',
-    copyTime: 'Copy time',
-  },
+  } as Record<ActionKind, string>,
+  actionDescriptions: {
+    screenshot: 'Open the Windows snipping tool',
+    showDesktop: 'Minimize all windows and show the desktop',
+    lockScreen: 'Lock Windows immediately',
+    muteToggle: 'Toggle system audio mute',
+    volumeUp: 'Raise system volume',
+    volumeDown: 'Lower system volume',
+    openBrowser: 'Open your default browser',
+    openUrl: 'Open the website configured below',
+    openApp: 'Open the app configured below',
+    openFile: 'Open the file configured below',
+    openFolder: 'Open the folder configured below',
+    openDownloads: 'Open your Downloads folder',
+    openDesktop: 'Open your Desktop folder',
+    openHome: 'Open your user folder',
+  } as Record<ActionKind, string>,
 
   // main process
   limitations: [
@@ -494,9 +509,23 @@ const zh: Strings = {
     openDownloads: '打开下载目录',
     openDesktop: '打开桌面目录',
     openHome: '打开用户目录',
-    copyDate: '复制日期',
-    copyTime: '复制时间',
-  },
+  } as Record<ActionKind, string>,
+  actionDescriptions: {
+    screenshot: '打开 Windows 截图工具',
+    showDesktop: '最小化所有窗口并显示桌面',
+    lockScreen: '立即锁定 Windows',
+    muteToggle: '切换系统声音静音',
+    volumeUp: '提高系统音量',
+    volumeDown: '降低系统音量',
+    openBrowser: '打开默认浏览器',
+    openUrl: '打开下方配置的网址',
+    openApp: '打开下方配置的应用',
+    openFile: '打开下方配置的文件',
+    openFolder: '打开下方配置的文件夹',
+    openDownloads: '打开“下载”文件夹',
+    openDesktop: '打开“桌面”文件夹',
+    openHome: '打开用户主目录',
+  } as Record<ActionKind, string>,
 
   limitations: [
     '无法在以管理员身份运行的窗口（例如任务管理器）上打开轮盘。',

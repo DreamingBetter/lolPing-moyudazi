@@ -23,6 +23,7 @@ export interface PoolItem<T extends string> {
   id: T;
   icon: string;
   name: string;
+  description?: string;
   badge?: string;
   onRemove?: () => void;
 }
@@ -137,6 +138,8 @@ export function WheelEditor<T extends string>({
   for (const item of wheelItems ?? []) byId.set(item.id, item);
   const name = (id: T) => byId.get(id)?.name ?? '?';
   const icon = (id: T) => byId.get(id)?.icon;
+  const description = (id: T) => byId.get(id)?.description;
+  const tooltip = (label: string, desc?: string): string => desc ? `${label}: ${desc}` : label;
   const isPicked = (match: (p: WheelSource<T>) => boolean) => (picked !== null && match(picked) ? ' picked' : '');
 
   return (
@@ -166,8 +169,9 @@ export function WheelEditor<T extends string>({
           {wheel.map((id, i) => {
             const a = (i * Math.PI) / 4;
             const label = t.wheelSlotLabel(t.slotNames[i], name(id));
+            const title = tooltip(label, description(id));
             return (
-              <div key={i} role="button" tabIndex={0} aria-label={label} title={label}
+              <div key={i} role="button" tabIndex={0} aria-label={title} title={title}
                 className={`weSlot${hot === i ? ' hot' : ''}${isPicked((p) => p.from === 'slot' && p.slot === i)}`}
                 style={{ left: C + R_ICON * Math.sin(a), top: C - R_ICON * Math.cos(a) }}
                 {...dragProps({ from: 'slot', id, slot: i })} {...dropProps(i)}
@@ -195,6 +199,7 @@ export function WheelEditor<T extends string>({
           <div className="weTiles">
             {pool.map((p) => {
               const slot = wheel.indexOf(p.id);
+              const title = tooltip(p.name, p.description);
               const pick = () => {
                 onPreview(p.id);
                 setPicked((cur) => (cur?.from === 'pool' && cur.id === p.id ? null : { from: 'pool', id: p.id }));
@@ -202,6 +207,7 @@ export function WheelEditor<T extends string>({
               return (
                 <div key={p.id} className={`weCell${p.onRemove ? ' removable' : ''}`}>
                   <div role="button" tabIndex={0}
+                    aria-label={title} title={title}
                     className={`weTile${isPicked((s) => s.from === 'pool' && s.id === p.id)}`}
                     {...dragProps({ from: 'pool', id: p.id })} onClick={pick} onKeyDown={activate(pick)}>
                     {p.badge ? <span className="weNew">{p.badge}</span> : null}
