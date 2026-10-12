@@ -18,8 +18,6 @@ describe('action model', () => {
       'openBrowser', 'openUrl', 'openApp', 'openFile', 'openFolder',
       'openDownloads', 'openDesktop', 'openHome',
     ]);
-    expect(ACTION_TEMPLATES.some((a) => a.kind === 'copyDate')).toBe(false);
-    expect(ACTION_TEMPLATES.some((a) => a.kind === 'copyTime')).toBe(false);
   });
 
   it('normalizes a parameterized URL action', () => {

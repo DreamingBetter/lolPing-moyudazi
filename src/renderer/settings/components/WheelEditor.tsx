@@ -33,6 +33,7 @@ interface Props<T extends string> {
   centerOn: boolean;
   trigger: string;
   pool: readonly PoolItem<T>[];
+  wheelItems?: readonly PoolItem<T>[];
   defaults: { wheel: readonly T[]; center: T };
   labels: { title: string; desc: string; poolTitle: string; poolDesc: string };
   /** Rendered under the pool's tiles, outside their scroll box, so it stays in view however long the pool is. */
@@ -54,7 +55,7 @@ const activate = (fn: () => void) => (e: KeyboardEvent) => {
 };
 
 export function WheelEditor<T extends string>({
-  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onSelectTarget, showCenter = true, onChange, onPreview,
+  wheel, center, centerOn, trigger, pool, wheelItems, defaults, labels, poolExtra, onDropFiles, onSelectTarget, showCenter = true, onChange, onPreview,
 }: Props<T>) {
   const t = useText();
   const [picked, setPicked] = useState<WheelSource<T> | null>(null);
@@ -133,6 +134,7 @@ export function WheelEditor<T extends string>({
   };
 
   const byId = new Map(pool.map((p) => [p.id, p]));
+  for (const item of wheelItems ?? []) byId.set(item.id, item);
   const name = (id: T) => byId.get(id)?.name ?? '?';
   const icon = (id: T) => byId.get(id)?.icon;
   const isPicked = (match: (p: WheelSource<T>) => boolean) => (picked !== null && match(picked) ? ' picked' : '');

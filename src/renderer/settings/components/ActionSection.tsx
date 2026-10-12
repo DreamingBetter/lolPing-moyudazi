@@ -2,13 +2,14 @@ import { Button, Input } from '@fluentui/react-components';
 import { Apps24Regular, Folder24Regular, Keyboard24Regular } from '@fluentui/react-icons';
 import { useEffect, useState } from 'react';
 import {
-  ACTION_TEMPLATES, DEFAULT_ACTION_WHEEL, actionIconUrl, actionTemplate, type ActionKind, type ActionSlot,
+  DEFAULT_ACTION_WHEEL, actionTemplate, type ActionKind, type ActionSlot,
 } from '../../../shared/actions';
 import { triggerLabel, type Settings } from '../../../shared/settings';
 import type { WheelPatch } from '../../../shared/wheelLayout';
 import { api } from '../api';
 import { useText } from '../text';
 import type { Update } from '../useAppState';
+import { actionLibraryItems, actionWheelItems } from '../actionItems';
 import { SettingRow } from './rows';
 import { TriggerPicker } from './TriggerPicker';
 import { WheelEditor, type PoolItem } from './WheelEditor';
@@ -54,10 +55,8 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
   const keyOff = s.actionTrigger === 'off';
   const key = s.actionTrigger === 'off' ? t.actionKey : triggerLabel(s.actionTrigger, t.lang, api.platform);
   const wheelIds = s.actionWheel.map((a) => a.id);
-  const pool: PoolItem<ActionPoolId>[] = [
-    ...s.actionWheel.map((a) => ({ id: a.id, icon: actionIconUrl(a.icon), name: a.label })),
-    ...ACTION_TEMPLATES.map((a) => ({ id: `template:${a.kind}`, icon: actionIconUrl(a.icon), name: t.actionNames[a.kind] })),
-  ];
+  const pool: PoolItem<ActionPoolId>[] = actionLibraryItems(t);
+  const wheelItems: PoolItem<ActionPoolId>[] = actionWheelItems(s.actionWheel, t);
   const selectedSlot = s.actionWheel.find((a) => a.id === selected);
   const updateSlot = (patch: Partial<ActionSlot>) => {
     if (!selectedSlot) return;
@@ -81,6 +80,7 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
         centerOn={false}
         trigger={key}
         pool={pool}
+        wheelItems={wheelItems}
         defaults={{ wheel: DEFAULT_ACTION_WHEEL.map((a) => a.id), center: DEFAULT_ACTION_WHEEL[0].id }}
         labels={{ title: t.actionWheelTitle, desc: t.actionWheelDesc(key), poolTitle: t.actionLibrary, poolDesc: t.actionLibraryDesc }}
         onChange={(patch) => void update(patchForDrop(s.actionWheel, patch))}
