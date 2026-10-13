@@ -56,7 +56,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - The Summoner cursor switch copies bundled cursor files into `%APPDATA%\lolPing\cursors\summoner` before writing registry values. Keep registry paths pointed at this stable user-data copy rather than the install/build output.
 - If applying Summoner fails after a backup exists, attempt to write the backup values back immediately, but keep the backup file so the user can still turn the switch off later.
 - After writing `HKCU\Control Panel\Cursors`, refresh with `SystemParametersInfo(SPI_SETCURSORS, 0, NULL, SPIF_SENDCHANGE)`, i.e. `fWinIni = 0x0002`. Do not pass `0x0003`; including `SPIF_UPDATEINIFILE` made `SPI_SETCURSORS` return false on the user's Windows build.
-- Mark newly added settings features with a small red text badge: `新` in Chinese and `NEW` in English. This should usually be a compact badge beside the feature title rather than an extra icon, so it does not compete with the feature's own navigation icon.
+- Mark newly added settings features with a prominent red/orange `NEW` text badge in every UI language. This should usually be an eye-catching badge beside the feature title rather than an extra icon, so it does not compete with the feature's own navigation icon. If a settings section contains a new feature row, mark both the row/title and that section's side-nav tab.
 
 ## Development Habits
 
@@ -65,7 +65,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Keep settings normalized and versioned in shared code; validate anything user-editable.
 - Keep global input capture conservative so normal desktop interactions are not hijacked unexpectedly.
 - Add focused tests for settings normalization, wheel/action selection, and main-process action execution.
-- Default ongoing development should happen in one long-lived integration worktree and branch instead of creating a fresh branch/worktree for every small task. Use `.worktrees/integration-action-room` on `integration/action-room` unless the user asks otherwise.
+- Default ongoing development should happen in one long-lived integration worktree and branch instead of creating a fresh branch/worktree for every small task. Use `.worktrees/develop` on `develop` unless the user asks otherwise.
 - Multiple Codex sessions may work on that same branch for this solo project, but each session must run `git status --short --branch` before editing, avoid concurrently editing the same files, preserve dirty changes it did not make, and commit completed slices frequently.
 - Create a separate branch/worktree only for risky experiments, release isolation, or work that is likely to conflict heavily. Delete stale worktrees/branches after confirming their changes are merged or intentionally abandoned.
 - After each development round, run `npm run dist` so the user can test the packaged result directly. Each round should refresh both `release/lolPing-Setup-0.5.0.exe` and `release/win-unpacked/lolPing.exe`.

@@ -15,8 +15,11 @@ nav.side { padding: 4px 8px; display: flex; flex-direction: column; gap: 3px; }
 .navItem:hover, .navItem.sel { background: var(--nav-sel); }
 .navItem.sel::before { content: ""; position: absolute; left: 0; top: 10px; width: 3px; height: 16px; border-radius: 2px; background: var(--colorBrandForeground1); }
 .featureLabel { display: inline-flex; align-items: flex-start; gap: 6px; min-width: 0; line-height: inherit; }
-.navItem .featureLabel { flex: 1; }
-.newFeatureBadge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 14px; height: 14px; padding: 0 4px; border-radius: 4px; background: #d13438; color: #fff; font-size: 10px; line-height: 14px; font-weight: 700; letter-spacing: 0; transform: translateY(-2px); }
+.navItem .featureLabel { flex: 1; align-items: center; }
+.newFeatureBadge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 28px; height: 16px; padding: 0 6px; border-radius: 999px; background: linear-gradient(135deg, #ff1744 0%, #ff6a00 100%); color: #fff; font-size: 10px; line-height: 16px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; box-shadow: 0 0 0 1px rgba(255,255,255,.38) inset, 0 0 10px rgba(255,55,40,.55); transform: translateY(-4px); animation: newFeaturePulse 1.8s ease-in-out infinite; }
+.navItem .newFeatureBadge { margin-left: auto; transform: translateY(-3px); }
+@keyframes newFeaturePulse { 0%, 100% { filter: brightness(1); box-shadow: 0 0 0 1px rgba(255,255,255,.38) inset, 0 0 10px rgba(255,55,40,.55); } 50% { filter: brightness(1.16); box-shadow: 0 0 0 1px rgba(255,255,255,.5) inset, 0 0 16px rgba(255,55,40,.8); } }
+@media (prefers-reduced-motion: reduce) { .newFeatureBadge { animation: none; } }
 main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .pageTitle { font: 600 28px/36px "Segoe UI Variable Display", "Segoe UI"; margin: 6px 0 18px; }
 .section { margin: 22px 0 8px; font-weight: 600; font-size: 14px; }

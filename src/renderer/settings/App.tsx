@@ -28,6 +28,7 @@ import { TextContext, useText } from './text';
 import { macDarkTheme, macLightTheme } from './macTheme';
 import { useAppState, type Update } from './useAppState';
 import { useUpdateState } from './useUpdateState';
+import { sectionHasNewFeature } from './featureBadges';
 
 const PLATFORM = api.platform;
 const MAC = PLATFORM === 'mac';
@@ -36,16 +37,20 @@ const LENGTH_UNIT = MAC ? 'pt' : 'px';
 
 type SettingsSection = { id: string; label: (t: Strings) => string; icon: ReactNode; newFeature?: boolean };
 
+function settingsSection(id: string, label: (t: Strings) => string, icon: ReactNode): SettingsSection {
+  return { id, label, icon, newFeature: sectionHasNewFeature(id) };
+}
+
 const SECTIONS: SettingsSection[] = [
-  { id: 'trigger', label: (t) => t.navTrigger, icon: <Cursor24Regular /> },
-  { id: 'toggle', label: (t) => t.navToggle, icon: <Keyboard24Regular /> },
-  { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
-  { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
-  { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
-  { id: 'actions', label: (t) => t.navActions, icon: <Apps24Regular />, newFeature: true },
-  { id: 'chat', label: (t) => t.navChat, icon: <Chat24Regular />, newFeature: true },
-  { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
-  { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
+  settingsSection('trigger', (t) => t.navTrigger, <Cursor24Regular />),
+  settingsSection('toggle', (t) => t.navToggle, <Keyboard24Regular />),
+  settingsSection('pings', (t) => t.navPings, <Speaker224Regular />),
+  settingsSection('wheel', (t) => t.navWheel, <DataPie24Regular />),
+  settingsSection('emotes', (t) => t.navEmotes, <Emoji24Regular />),
+  settingsSection('actions', (t) => t.navActions, <Apps24Regular />),
+  settingsSection('chat', (t) => t.navChat, <Chat24Regular />),
+  settingsSection('room', (t) => t.navRoom, <PeopleCommunity24Regular />),
+  settingsSection('app', (t) => t.navApp, <Settings24Regular />),
 ];
 
 /** Pings that aren't in League's default wheel layout get a "new" badge. */
@@ -223,7 +228,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <div className="section" id="room">{t.navRoom}</div>
         <RoomSection settings={s} update={update} onOpenChat={() => showSection('chat')} />
 
-        <div className="section" id="app">{t.navApp}</div>
+        <div className="section" id="app"><FeatureLabel isNew>{t.navApp}</FeatureLabel></div>
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
           checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
         {!MAC ? (

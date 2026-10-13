@@ -37,7 +37,7 @@ describe('language', () => {
 
   it('names the new feature badge for both UI languages', () => {
     expect(strings('en').newFeatureBadge).toBe('NEW');
-    expect(strings('zh-CN').newFeatureBadge).toBe('新');
+    expect(strings('zh-CN').newFeatureBadge).toBe('NEW');
   });
 
   it('describes every action in both languages', () => {

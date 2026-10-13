@@ -404,7 +404,7 @@ const zh: Strings = {
   wheelPickHint: (name) => `请单击一个扇区或中心来放置“${name}”。按 Esc 取消。`,
   wheelCenter: '单击',
   wheelNew: '新',
-  newFeatureBadge: '新',
+  newFeatureBadge: 'NEW',
   wheelSlotLabel: (dir, name) => `${dir}：${name}`,
   wheelCenterLabel: (trigger, name) => `${trigger} + 单击：${name}`,
   slotNames: ['上', '右上', '右', '右下', '下', '左下', '左', '左上'],
