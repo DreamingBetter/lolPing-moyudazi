@@ -6,6 +6,7 @@ import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
+import type { ChatSendResult, RoomChatState } from '../shared/roomChat';
 import { patchClashes, rendererPatch } from '../shared/settings';
 import type { UpdateState } from '../shared/update';
 import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
@@ -49,7 +50,11 @@ export interface SettingsIpcDeps {
     clipboardCode(): Promise<string | null>;
     copyCode(): void;
     retryInternet(): void;
+    chatState(): RoomChatState;
+    sendChat(text: string): ChatSendResult;
+    retryChat(id: string): ChatSendResult;
   };
+  showSection?(section: string): void;
 }
 
 /** Returns an error message when another app already owns this shortcut. */
@@ -129,9 +134,16 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.capture, (_e, on: unknown) => d.setCapturing(on === true));
   ipcMain.handle(SETTINGS_CH.openAccessibility, () => d.openAccessibility());
   ipcMain.handle(SETTINGS_CH.roomGet, () => d.room.state());
-  ipcMain.handle(SETTINGS_CH.roomCreate, () => d.room.create());
-  ipcMain.handle(SETTINGS_CH.roomJoin, (_e, text: unknown): Promise<JoinResult> | JoinResult =>
-    typeof text === 'string' ? d.room.join(text) : { ok: false, error: 'invalid' });
+  ipcMain.handle(SETTINGS_CH.roomCreate, async () => {
+    await d.room.create();
+    d.showSection?.('chat');
+  });
+  ipcMain.handle(SETTINGS_CH.roomJoin, async (_e, text: unknown): Promise<JoinResult> => {
+    if (typeof text !== 'string') return { ok: false, error: 'invalid' };
+    const result = await d.room.join(text);
+    if (result.ok) d.showSection?.('chat');
+    return result;
+  });
   ipcMain.handle(SETTINGS_CH.roomLeave, () => d.room.leave());
   ipcMain.handle(SETTINGS_CH.roomMute, (_e, peer: unknown, on: unknown) => {
     if (typeof peer === 'string') d.room.mute(peer, on === true);
@@ -139,6 +151,11 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.roomClipboard, () => d.room.clipboardCode());
   ipcMain.handle(SETTINGS_CH.roomCopy, () => d.room.copyCode());
   ipcMain.handle(SETTINGS_CH.roomRetryInternet, () => d.room.retryInternet());
+  ipcMain.handle(SETTINGS_CH.roomChatGet, () => d.room.chatState());
+  ipcMain.handle(SETTINGS_CH.roomChatSend, (_e, text: unknown): ChatSendResult =>
+    typeof text === 'string' ? d.room.sendChat(text) : { ok: false, error: 'empty' });
+  ipcMain.handle(SETTINGS_CH.roomChatRetry, (_e, id: unknown): ChatSendResult =>
+    typeof id === 'string' ? d.room.retryChat(id) : { ok: false, error: 'failed' });
 
   ipcMain.handle(SETTINGS_CH.updateGet, (): UpdateState | null => d.update?.state() ?? null);
   ipcMain.handle(SETTINGS_CH.updateCheck, async () => {

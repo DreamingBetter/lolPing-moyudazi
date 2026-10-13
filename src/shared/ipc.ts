@@ -3,6 +3,7 @@ import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState } from './room';
+import type { ChatSendResult, RoomChatState } from './roomChat';
 import type { OverlaySettings, Settings } from './settings';
 import type { UpdateState } from './update';
 
@@ -108,6 +109,10 @@ export interface SettingsApi {
   copyRoomCode(): Promise<void>;
   /** Reconnects to every relay now (the Room page's Retry). */
   retryInternet(): Promise<void>;
+  getChat(): Promise<RoomChatState>;
+  onChat(cb: (state: RoomChatState) => void): () => void;
+  sendChat(text: string): Promise<ChatSendResult>;
+  retryChat(id: string): Promise<ChatSendResult>;
   /** The main process asks to scroll to a section (e.g. tray → Room settings…). */
   onShowSection(cb: (id: string) => void): () => void;
   /** Where the update checker is, or null when this build has none (a development build): then the page shows no update controls. */

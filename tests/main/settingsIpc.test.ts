@@ -8,6 +8,7 @@ import { registerSettingsIpc, type SettingsIpcDeps } from '../../src/main/settin
 import { SettingsStore } from '../../src/main/settingsStore';
 import { strings } from '../../src/shared/i18n';
 import { SETTINGS_CH } from '../../src/shared/ipc';
+import type { RoomChatState } from '../../src/shared/roomChat';
 import type { UpdateState } from '../../src/shared/update';
 
 const h = vi.hoisted(() => ({
@@ -37,6 +38,8 @@ const idOf = (b: Uint8Array): string => `c:${createHash('sha256').update(b).dige
 
 let store: SettingsStore;
 let library: EmoteLibrary;
+let roomApi: SettingsIpcDeps['room'];
+let shown: string[];
 const call = (channel: string, ...args: unknown[]): Promise<unknown> => Promise.resolve(h.handlers.get(channel)!({}, ...args));
 
 beforeEach(() => {
@@ -46,6 +49,21 @@ beforeEach(() => {
   store = new SettingsStore(dir, 60_000);
   store.load();
   library = new EmoteLibrary(join(dir, 'emotes'));
+  const chatState: RoomChatState = { phase: 'active', code: 'PING-12345-6789A', members: 2, messages: [] };
+  roomApi = {
+    state: vi.fn(),
+    create: vi.fn(async () => undefined),
+    join: vi.fn(async () => ({ ok: true as const })),
+    leave: vi.fn(),
+    mute: vi.fn(),
+    clipboardCode: vi.fn(async () => null),
+    copyCode: vi.fn(),
+    retryInternet: vi.fn(),
+    chatState: vi.fn(() => chatState),
+    sendChat: vi.fn((text: string) => ({ ok: true as const, id: text })),
+    retryChat: vi.fn((id: string) => ({ ok: true as const, id })),
+  };
+  shown = [];
   registerWith();
 });
 
@@ -53,7 +71,7 @@ beforeEach(() => {
 function registerWith(update?: SettingsIpcDeps['update']): void {
   h.handlers.clear();
   registerSettingsIpc({
-    store, library, text: () => strings('en'), platform: 'win', room: {}, update,
+    store, library, text: () => strings('en'), platform: 'win', room: roomApi, showSection: (section: string) => shown.push(section), update,
   } as unknown as SettingsIpcDeps);
 }
 
@@ -133,6 +151,26 @@ describe('settings IPC', () => {
     const electron = await import('electron');
     vi.mocked(electron.dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] });
     expect(await call(SETTINGS_CH.pickFile)).toBeNull();
+  });
+
+  it('exposes room chat state and validates chat send and retry input', async () => {
+    expect(await call(SETTINGS_CH.roomChatGet)).toEqual({ phase: 'active', code: 'PING-12345-6789A', members: 2, messages: [] });
+    expect(await call(SETTINGS_CH.roomChatSend, 'hello')).toEqual({ ok: true, id: 'hello' });
+    expect(roomApi.sendChat).toHaveBeenCalledWith('hello');
+    expect(await call(SETTINGS_CH.roomChatSend, 123)).toEqual({ ok: false, error: 'empty' });
+    expect(await call(SETTINGS_CH.roomChatRetry, '0123456789abcdef0123456789abcdef')).toEqual({ ok: true, id: '0123456789abcdef0123456789abcdef' });
+    expect(roomApi.retryChat).toHaveBeenCalledWith('0123456789abcdef0123456789abcdef');
+    expect(await call(SETTINGS_CH.roomChatRetry, null)).toEqual({ ok: false, error: 'failed' });
+  });
+
+  it('opens Chat after successful room create and join only', async () => {
+    await call(SETTINGS_CH.roomCreate);
+    expect(shown).toEqual(['chat']);
+    await call(SETTINGS_CH.roomJoin, 'code');
+    expect(shown).toEqual(['chat', 'chat']);
+    vi.mocked(roomApi.join).mockResolvedValueOnce({ ok: false, error: 'failed' });
+    await call(SETTINGS_CH.roomJoin, 'bad');
+    expect(shown).toEqual(['chat', 'chat']);
   });
 });
 

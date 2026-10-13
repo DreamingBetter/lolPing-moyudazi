@@ -1,6 +1,7 @@
 import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
-  Apps24Regular, ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
+  Apps24Regular, ArrowMove24Regular, ArrowSync24Regular, Chat24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular,
+  MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
   Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
@@ -14,6 +15,7 @@ import type { WheelPatch } from '../../shared/wheelLayout';
 import { api } from './api';
 import { AboutSection } from './components/AboutSection';
 import { ActionSection } from './components/ActionSection';
+import { ChatSection } from './components/ChatSection';
 import { EmoteSection } from './components/EmoteSection';
 import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
@@ -39,6 +41,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
   { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
   { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
   { id: 'actions', label: (t) => t.navActions, icon: <Apps24Regular /> },
+  { id: 'chat', label: (t) => t.navChat, icon: <Chat24Regular /> },
   { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
   { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
 ];
@@ -97,12 +100,13 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
+  const showSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   const pingPool: PoolItem<PingId>[] = ALL_PINGS.map((p) => ({
     id: p.id, icon: textureUrl(p.icon), name: t.pingNames[p.id], badge: NEW_PINGS.has(p.id) ? t.wheelNew : undefined,
   }));
 
   useEffect(() => {
-    const show = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    const show = (id: string) => showSection(id);
     const initial = location.hash.slice(1);
     if (initial) requestAnimationFrame(() => show(initial));
     return api.onShowSection(show);
@@ -134,7 +138,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
           </div>
         </div>
         {SECTIONS.map((sec) => (
-          <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} onClick={() => document.getElementById(sec.id)?.scrollIntoView({ behavior: 'smooth' })}>
+          <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} onClick={() => showSection(sec.id)}>
             {sec.icon}
             {sec.label(t)}
           </button>
@@ -200,8 +204,11 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <div className="section" id="actions">{t.navActions}</div>
         <ActionSection settings={s} update={update} />
 
+        <div className="section" id="chat">{t.navChat}</div>
+        <ChatSection onOpenRoom={() => showSection('room')} />
+
         <div className="section" id="room">{t.navRoom}</div>
-        <RoomSection settings={s} update={update} />
+        <RoomSection settings={s} update={update} onOpenChat={() => showSection('chat')} />
 
         <div className="section" id="app">{t.navApp}</div>
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}

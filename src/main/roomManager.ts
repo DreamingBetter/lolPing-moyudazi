@@ -2,9 +2,14 @@ import { EventEmitter } from 'node:events';
 import type { EmoteRef } from '../shared/emotes';
 import type { PingId } from '../shared/pings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
+import {
+  CHAT_HISTORY_LIMIT, CHAT_INCOMING_BURST, CHAT_INCOMING_RATE, CHAT_OUTGOING_BURST, CHAT_OUTGOING_RATE,
+  type ChatHistoryItem, type ChatSendResult, type RoomChatMessage, type RoomChatState,
+} from '../shared/roomChat';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
-  decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, type MemberStatus, type PresenceMsg, type RoomMessage,
+  decodeMessage, encodeMessage, isChatId, isChatTextTooLong, isOlderThan, PROTOCOL_VERSION, sanitizeChatText,
+  type ChatHistoryMsg, type MemberStatus, type PresenceMsg, type RoomMessage,
 } from '../shared/roomProtocol';
 import { RateLimiter } from './rateLimiter';
 import { ReplayGuard } from './replayGuard';
@@ -36,6 +41,9 @@ const STALE_STRIKES = 3;
 const SLEEP_GAP_MS = 5000;
 /** How long the clock warning stays up after the last stale presence. */
 const SKEW_HINT_MS = 30_000;
+const CHAT_HISTORY_REQUEST_MS = 30_000;
+const compareChatMessages = (a: { id: string; ts: number }, b: { id: string; ts: number }): number =>
+  a.ts !== b.ts ? a.ts - b.ts : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 
 export interface RemotePing {
   displayId: number;
@@ -87,6 +95,12 @@ interface Member {
   paths: Partial<Record<Transport['kind'], { key: PeerKey; seenAt: number }>>;
 }
 
+interface PendingHistory {
+  received: Set<string>;
+  totals: Map<string, number>;
+  expiresAt: number;
+}
+
 const toHex = (b: Uint8Array): string => [...b].map((v) => v.toString(16).padStart(2, '0')).join('');
 
 /**
@@ -126,6 +140,13 @@ export class RoomManager extends EventEmitter {
   /** The transports running for this room: all of them, except the internet one while it isn't allowed. */
   private readonly active = new Set<Transport>();
   private readonly relayCap: RateLimiter;
+  private chatMessages: RoomChatMessage[] = [];
+  private chatSeen = new Set<string>();
+  private chatHistoryRequested = false;
+  private pendingHistory = new Map<string, PendingHistory>();
+  private readonly chatOutgoing: RateLimiter;
+  private readonly chatIncoming: RateLimiter;
+  private lastChatState = '';
   /** A presence waiting out SHARED_PRESENCE_MS, per shared transport. */
   private readonly sharedTimers = new Map<Transport, NodeJS.Timeout>();
 
@@ -135,6 +156,8 @@ export class RoomManager extends EventEmitter {
     this.guard = new ReplayGuard(deps.now);
     this.limiter = new RateLimiter(deps.now);
     this.relayCap = new RateLimiter(deps.now);
+    this.chatOutgoing = new RateLimiter(deps.now);
+    this.chatIncoming = new RateLimiter(deps.now);
     for (const t of deps.transports) {
       t.on('packet', (peer: PeerKey, packet: Uint8Array) => this.onPacket(t, peer, packet));
       t.on('peerGone', (peer: PeerKey) => this.onPeerGone(t, peer));
@@ -171,25 +194,38 @@ export class RoomManager extends EventEmitter {
   }
 
   sendPing(ping: PingId, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'ping', ping, ...shared });
+    this.sendShared({ t: 'ping', ping, ...shared }, { respectPause: true, useRelayCap: true });
   }
 
   sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'emote', e, ...shared });
+    this.sendShared({ t: 'emote', e, ...shared }, { respectPause: true, useRelayCap: true });
   }
 
-  /** A ping or an emote: each member gets it over its own route; shared transports get one send, within the relay cap. */
-  private sendShared(body: Record<string, unknown>): void {
-    if (this.phase === 'idle' || !this.keys || this.paused) return;
-    const packet = this.seal(body);
+  /** Sends a room packet over each member's current route, optionally applying ping/emote gates and relay caps. */
+  private sendShared(
+    body: Record<string, unknown>,
+    options: { respectPause: boolean; useRelayCap: boolean },
+  ): boolean {
+    if (this.phase === 'idle' || !this.keys || (options.respectPause && this.paused)) return false;
+    let packet: Buffer;
+    try {
+      packet = this.seal(body);
+    } catch {
+      return false;
+    }
     const sharedRoutes = new Set<Transport>();
+    let available = this.members.size === 0;
     for (const m of this.members.values()) {
       const route = this.route(m);
       if (!route) continue;
+      available = true;
       if (route.transport.shared) sharedRoutes.add(route.transport);
       else route.transport.sendTo(route.key, packet);
     }
-    for (const t of sharedRoutes) if (this.relayCap.allow(t.kind, RELAY_PING_RATE, RELAY_PING_BURST)) t.broadcast(packet);
+    for (const t of sharedRoutes) {
+      if (!options.useRelayCap || this.relayCap.allow(t.kind, RELAY_PING_RATE, RELAY_PING_BURST)) t.broadcast(packet);
+    }
+    return available;
   }
 
   setStatusFlags(f: { paused: boolean; roomMuted: boolean }): void {
@@ -267,17 +303,67 @@ export class RoomManager extends EventEmitter {
     };
   }
 
+  chatState(): RoomChatState {
+    return {
+      phase: this.phase,
+      code: this.code ? formatRoomCode(this.code) : null,
+      members: this.phase === 'idle' ? 0 : this.members.size + 1,
+      messages: this.chatMessages.map((m) => ({ ...m })),
+    };
+  }
+
+  sendChat(text: string): ChatSendResult {
+    if (this.phase !== 'active' || !this.keys) return { ok: false, error: 'not-in-room' };
+    if (isChatTextTooLong(text)) return { ok: false, error: 'too-long' };
+    const clean = sanitizeChatText(text);
+    if (!clean) return { ok: false, error: 'empty' };
+    if (!this.chatFits(clean)) return { ok: false, error: 'too-long' };
+    if (!this.chatOutgoing.allow(this.self, CHAT_OUTGOING_RATE, CHAT_OUTGOING_BURST)) {
+      return { ok: false, error: 'failed' };
+    }
+    const id = this.newChatId();
+    const p = this.deps.profile();
+    const message: RoomChatMessage = {
+      id, peer: this.self, name: p.name, color: p.color, ts: this.deps.now(), text: clean, self: true, status: 'sending',
+    };
+    this.chatMessages.push(message);
+    this.chatSeen.add(id);
+    this.sortAndTrimChat();
+    this.emitChatState();
+    const sent = this.sendShared({ t: 'chat', id, text: clean }, { respectPause: false, useRelayCap: false });
+    message.status = sent ? 'sent' : 'failed';
+    this.emitChatState();
+    return sent ? { ok: true, id } : { ok: false, error: 'failed' };
+  }
+
+  retryChat(id: string): ChatSendResult {
+    if (this.phase !== 'active' || !this.keys) return { ok: false, error: 'not-in-room' };
+    const message = this.chatMessages.find((m) => m.self && m.id === id && m.status === 'failed');
+    if (!message) return { ok: false, error: 'failed' };
+    if (!this.chatOutgoing.allow(this.self, CHAT_OUTGOING_RATE, CHAT_OUTGOING_BURST)) {
+      return { ok: false, error: 'failed' };
+    }
+    message.status = 'sending';
+    this.emitChatState();
+    const sent = this.sendShared({ t: 'chat', id: message.id, text: message.text }, { respectPause: false, useRelayCap: false });
+    message.status = sent ? 'sent' : 'failed';
+    this.emitChatState();
+    return sent ? { ok: true, id: message.id } : { ok: false, error: 'failed' };
+  }
+
   /** False when the keys couldn't be derived: the room is back to idle. */
   private async start(code: string): Promise<boolean> {
     if (this.phase !== 'idle') this.leave();
     const session = ++this.session;
     this.self = toHex(this.deps.randomBytes(8));
     this.seq = 0;
+    this.clearChat();
     this.phase = 'joining';
     this.code = code;
     this.guard = new ReplayGuard(this.deps.now);
     this.aloneSince = this.deps.now();
     this.emitState();
+    this.emitChatState();
     let keys: RoomKeys;
     try {
       keys = await this.deps.deriveKeys(code);
@@ -322,6 +408,7 @@ export class RoomManager extends EventEmitter {
     this.emit('saveCode', this.code);
     this.emit('toast', { kind: 'joinedRoom', code: formatRoomCode(this.code!) } satisfies RoomToast);
     this.emitState();
+    this.emitChatState();
   }
 
   private stop(): void {
@@ -343,7 +430,9 @@ export class RoomManager extends EventEmitter {
     this.staleStrikes.clear();
     this.lastPresence = {};
     this.aloneSince = null;
+    this.clearChat();
     this.emitState();
+    this.emitChatState();
   }
 
   private tick(): void {
@@ -351,6 +440,7 @@ export class RoomManager extends EventEmitter {
     if (now - this.lastTick > SLEEP_GAP_MS) this.wokeAt = now;
     this.lastTick = now;
     for (const [peer, s] of this.staleStrikes) if (now - s.at >= SKEW_HINT_MS) this.staleStrikes.delete(peer);
+    for (const [request, pending] of this.pendingHistory) if (now >= pending.expiresAt) this.pendingHistory.delete(request);
     for (const m of [...this.members.values()]) {
       const heard = Math.max(...Object.values(m.paths).map((p) => p.seenAt), m.firstSeen, this.wokeAt);
       if (now - heard >= DROP_MS[m.viaInternet ? 'internet' : 'lan']) this.remove(m, 'disconnected');
@@ -380,6 +470,19 @@ export class RoomManager extends EventEmitter {
     }
     if (!m) return;
     this.heard(m, t, key);
+    if (msg.t === 'chat') {
+      this.receiveChat(m, msg.id, msg.ts, msg.text);
+      return;
+    }
+    if (msg.t === 'chatHistoryRequest') {
+      this.sendChatHistory(msg.request);
+      return;
+    }
+    if (msg.t === 'chatHistory') {
+      this.receiveChatHistory(m.peer, msg);
+      return;
+    }
+    if (msg.t !== 'ping' && msg.t !== 'emote') return;
     // Pings and emotes pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
     if (!this.limiter.allow(m.peer, this.deps.profile().limit)) return;
@@ -389,6 +492,162 @@ export class RoomManager extends EventEmitter {
     const tag = { name: m.name, color: m.color };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
     else this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
+  }
+
+  private receiveChat(m: Member, id: string, ts: number, text: string): void {
+    if (this.chatSeen.has(id)) return;
+    if (!this.chatIncoming.allow(m.peer, CHAT_INCOMING_RATE, CHAT_INCOMING_BURST)) return;
+    this.chatSeen.add(id);
+    this.chatMessages.push({ id, peer: m.peer, name: m.name, color: m.color, ts, text, self: false });
+    this.sortAndTrimChat();
+    this.emitChatState();
+  }
+
+  private requestChatHistory(): void {
+    if (this.chatHistoryRequested || !this.keys || this.phase === 'idle') return;
+    const request = this.newChatId();
+    this.chatHistoryRequested = true;
+    this.pendingHistory.set(request, {
+      received: new Set(),
+      totals: new Map(),
+      expiresAt: this.deps.now() + CHAT_HISTORY_REQUEST_MS,
+    });
+    this.sendShared({ t: 'chatHistoryRequest', request }, { respectPause: false, useRelayCap: false });
+  }
+
+  private sendChatHistory(request: string): void {
+    if (!this.keys) return;
+    const items = this.chatMessages
+      .filter((m) => !m.self || m.status === 'sent')
+      .map(({ id, peer, ts, name, color, text }): ChatHistoryItem => ({ id, peer, ts, name, color, text }))
+      .sort(compareChatMessages)
+      .slice(-CHAT_HISTORY_LIMIT);
+    const parts: ChatHistoryItem[][] = [];
+    let current: ChatHistoryItem[] = [];
+    for (const item of items) {
+      const candidate = [...current, item];
+      if (this.chatHistoryFits(request, parts.length, 256, candidate)) {
+        current = candidate;
+        continue;
+      }
+      if (current.length > 0) parts.push(current);
+      current = this.chatHistoryFits(request, parts.length, 256, [item]) ? [item] : [];
+    }
+    if (current.length > 0 || parts.length === 0) parts.push(current);
+    const total = parts.length;
+    parts.forEach((messages, part) => {
+      this.sendShared({ t: 'chatHistory', request, part, total, messages }, { respectPause: false, useRelayCap: false });
+    });
+  }
+
+  private receiveChatHistory(senderPeer: string, msg: ChatHistoryMsg): void {
+    const pending = this.pendingHistory.get(msg.request);
+    if (!pending || pending.expiresAt <= this.deps.now()) return;
+    const previousTotal = pending.totals.get(senderPeer);
+    if (previousTotal !== undefined && previousTotal !== msg.total) return;
+    pending.totals.set(senderPeer, msg.total);
+    const partKey = `${senderPeer}:${msg.part}`;
+    if (pending.received.has(partKey)) return;
+    pending.received.add(partKey);
+    let changed = false;
+    for (const item of msg.messages) {
+      const existing = this.chatMessages.find((m) => m.id === item.id);
+      if (existing) {
+        if (existing.self && existing.status !== 'sent') {
+          existing.status = 'sent';
+          changed = true;
+        }
+        continue;
+      }
+      if (this.chatSeen.has(item.id)) continue;
+      this.chatSeen.add(item.id);
+      this.chatMessages.push({
+        id: item.id,
+        peer: item.peer,
+        name: item.name,
+        color: item.color,
+        ts: item.ts,
+        text: item.text,
+        self: item.peer === this.self,
+        status: item.peer === this.self ? 'sent' : undefined,
+      });
+      changed = true;
+    }
+    if (changed) {
+      this.sortAndTrimChat();
+      this.emitChatState();
+    }
+  }
+
+  private chatFits(text: string): boolean {
+    if (!this.keys) return false;
+    const peer = 'f'.repeat(16);
+    const id = 'f'.repeat(32);
+    const max = Number.MAX_SAFE_INTEGER;
+    try {
+      seal(this.keys.msgKey, encodeMessage({ t: 'chat', peer, seq: max, ts: max, id, text }));
+      seal(this.keys.msgKey, encodeMessage({
+        t: 'chatHistory',
+        peer,
+        seq: max,
+        ts: max,
+        request: id,
+        part: 255,
+        total: 256,
+        messages: [{ id, peer, ts: max, name: 'x'.repeat(16), color: 7, text }],
+      }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private chatHistoryFits(request: string, part: number, total: number, messages: ChatHistoryItem[]): boolean {
+    if (!this.keys) return false;
+    try {
+      seal(this.keys.msgKey, encodeMessage({
+        t: 'chatHistory',
+        peer: 'f'.repeat(16),
+        seq: Number.MAX_SAFE_INTEGER,
+        ts: Number.MAX_SAFE_INTEGER,
+        request,
+        part,
+        total,
+        messages,
+      }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private newChatId(): string {
+    const bytes = this.deps.randomBytes(16);
+    let id = toHex(bytes);
+    let counter = this.seq + 1;
+    while (!isChatId(id) || this.chatSeen.has(id) || this.pendingHistory.has(id)) {
+      const fallback = new Uint8Array(bytes);
+      const n = counter >>> 0;
+      for (let i = 0; i < 4; i++) fallback[12 + i] = (n >>> (24 - i * 8)) & 0xff;
+      id = toHex(fallback);
+      counter++;
+    }
+    return id;
+  }
+
+  private clearChat(): void {
+    this.chatMessages = [];
+    this.chatSeen.clear();
+    this.chatHistoryRequested = false;
+    this.pendingHistory.clear();
+    this.chatOutgoing.clear();
+    this.chatIncoming.clear();
+    this.lastChatState = '';
+  }
+
+  private sortAndTrimChat(): void {
+    this.chatMessages.sort(compareChatMessages);
+    if (this.chatMessages.length > CHAT_HISTORY_LIMIT) this.chatMessages.splice(0, this.chatMessages.length - CHAT_HISTORY_LIMIT);
   }
 
   private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg): void {
@@ -414,7 +673,9 @@ export class RoomManager extends EventEmitter {
       else t.sendTo(key, this.presencePacket());
     }
     if (isNew && this.phase === 'active') this.emit('toast', { kind: 'joined', name: m.name } satisfies RoomToast);
+    if (isNew && this.phase === 'joining' && !this.chatHistoryRequested) this.requestChatHistory();
     this.emitState();
+    this.emitChatState();
   }
 
   /**
@@ -442,10 +703,12 @@ export class RoomManager extends EventEmitter {
   private remove(m: Member, kind: 'left' | 'disconnected'): void {
     this.members.delete(m.peer);
     this.limiter.forget(m.peer);
+    this.chatIncoming.forget(m.peer);
     for (const p of Object.values(m.paths)) this.answered.delete(p.key);
     if (this.members.size === 0 && this.phase !== 'idle') this.aloneSince = this.deps.now();
     this.emit('toast', { kind, name: m.name } satisfies RoomToast);
     this.emitState();
+    this.emitChatState();
   }
 
   /** LAN while it is alive, else internet, else nothing. */
@@ -533,5 +796,13 @@ export class RoomManager extends EventEmitter {
     if (json === this.lastState) return;
     this.lastState = json;
     this.emit('state', s);
+  }
+
+  private emitChatState(): void {
+    const s = this.chatState();
+    const json = JSON.stringify(s);
+    if (json === this.lastChatState) return;
+    this.lastChatState = json;
+    this.emit('chatState', s);
   }
 }

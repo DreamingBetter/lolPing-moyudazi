@@ -8,7 +8,7 @@ import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
-import type { RoomState } from '../shared/room';
+import type { JoinResult, RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
@@ -170,6 +170,18 @@ function start(): void {
     const code = room.state().code;
     if (code) void clipboard.writeText(code).catch(() => undefined);
   };
+  const showChat = (): void => {
+    openSettingsWindow('chat');
+  };
+  const createRoom = async (): Promise<void> => {
+    await room.create();
+    showChat();
+  };
+  const joinRoom = async (text: string): Promise<JoinResult> => {
+    const result = await room.join(text);
+    if (result.ok) showChat();
+    return result;
+  };
 
   // macOS Accessibility. Without it the helper can't create its event tap, so it isn't started: a timer waits for
   // the permission instead. `staleAccess`: macOS lists lolPing as allowed, yet the helper still has no access.
@@ -214,11 +226,11 @@ function start(): void {
       room: {
         joinClipboard: () => {
           void clipboardCode().then((code) => {
-            if (code) void room.join(code);
+            if (code) void joinRoom(code);
             else overlays.toast(text().toastNoCode, text().toastNoCodeBody);
           });
         },
-        create: () => void room.create(),
+        create: () => void createRoom(),
         copyCode: copyRoomCode,
         setMuted: (on) => store.update({ roomMuted: on }),
         leave: () => room.leave(),
@@ -252,10 +264,15 @@ function start(): void {
     if (quitting) return;
     const s = roomState();
     tray.setRoom({ code: s.code, count: s.members.length, muted: settings.roomMuted });
-    settingsWindow()?.webContents.send(SETTINGS_CH.roomChanged, s);
+    sendToSettings(SETTINGS_CH.roomChanged, s);
+  }
+  function pushChat(): void {
+    if (quitting) return;
+    sendToSettings(SETTINGS_CH.roomChatChanged, room.chatState());
   }
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
   room.on('state', pushRoom);
+  room.on('chatState', pushChat);
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
   overlays.on('shared', (p: SharedPing) => {
@@ -412,6 +429,12 @@ function start(): void {
       clipboardCode,
       copyCode: copyRoomCode,
       retryInternet: () => relay.retryNow(),
+      chatState: () => room.chatState(),
+      sendChat: (text) => room.sendChat(text),
+      retryChat: (id) => room.retryChat(id),
+    },
+    showSection: (section) => {
+      openSettingsWindow(section);
     },
   });
   // The page can't report that it went away mid-capture (window closed, renderer crashed): release the suspend here.
@@ -428,6 +451,7 @@ function start(): void {
   syncRoomFlags();
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
+  pushChat();
   if (settings.rejoinRoom && settings.lastRoomCode) void room.join(settings.lastRoomCode);
   if (IS_MAC) {
     // A menu bar app: open settings only when there is something to do, otherwise point at the menu bar icon.
