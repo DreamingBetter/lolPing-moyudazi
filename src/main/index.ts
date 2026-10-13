@@ -1,5 +1,7 @@
 import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { spawn } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
@@ -11,13 +13,14 @@ import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
+import { executeAction } from './actionExecutor';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
 import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
-import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
+import { OverlayManager, type SelectedAction, type SharedEmote, type SharedPing } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
@@ -61,6 +64,12 @@ function relayUrls(): readonly string[] {
   const urls = custom?.split(',').map((u) => u.trim()).filter((u) => u.startsWith('wss://')) ?? [];
   return urls.length > 0 ? urls : RELAYS;
 }
+
+const runDetached = (command: string, args: string[]): Promise<void> => new Promise((resolve, reject) => {
+  const child = spawn(command, args, { windowsHide: true, detached: false, stdio: 'ignore' });
+  child.once('error', reject);
+  child.once('spawn', resolve);
+});
 
 /** macOS: the app, Edit and Window menus, so Cmd+Q, Cmd+W and the clipboard shortcuts work in the settings window. */
 function setMacMenu(): void {
@@ -258,6 +267,33 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
   });
+  overlays.on('action', (p: SelectedAction) => {
+    const slot = settings.actionWheel.find((a) => a.id === p.id);
+    if (!slot) {
+      overlays.toast(text().actionFailed, text().actionMissing);
+      return;
+    }
+    void executeAction(slot, {
+      platform: PLATFORM,
+      openExternal: (url) => shell.openExternal(url),
+      openPath: (path) => shell.openPath(path),
+      run: runDetached,
+      injectKeys: (keys) => bridge.injectKeys(keys),
+      exists: existsSync,
+    }).then((result) => {
+      if (result.ok) return;
+      const t = text();
+      const body = result.reason === 'missingConfig' ? t.actionMissingConfig
+        : result.reason === 'invalidUrl' ? t.actionInvalidUrl
+          : result.reason === 'pathMissing' ? t.actionPathMissing
+            : result.reason === 'unsupported' ? t.actionUnsupported
+              : result.message || t.actionOpenFailed;
+      overlays.toast(t.actionFailed, body);
+    }).catch((err: Error) => {
+      console.warn('[action]', err);
+      overlays.toast(text().actionFailed, text().actionOpenFailed);
+    });
+  });
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
     const t = text();
@@ -283,6 +319,7 @@ function start(): void {
     problems: [
       ...store.problems,
       ...(store.emoteKeyClashed ? [text().problemEmoteKeyClash] : []),
+      ...(store.actionKeyClashed ? [text().problemActionKeyClash] : []),
       ...[...overlays.missingAssets].map((a) => text().missingAsset(a)),
     ],
     limitations: text().limitations,

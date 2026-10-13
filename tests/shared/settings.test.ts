@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_ACTION_WHEEL } from '../../src/shared/actions';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from '../../src/shared/emoteCatalog';
 import { MOD } from '../../src/shared/keys';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
@@ -255,7 +256,7 @@ describe('emote settings', () => {
 
 describe('emote key clashes', () => {
   const toggle = { mods: MOD.ctrl | MOD.alt, vk: 0x50 };
-  const current = { ...DEFAULT_SETTINGS, trigger: 'alt' as const, emoteTrigger: 'ctrl' as const };
+  const current = { ...DEFAULT_SETTINGS, trigger: 'alt' as const, emoteTrigger: 'ctrl' as const, actionTrigger: 'win' as const };
 
   it('compares triggers by name or key code', () => {
     expect(sameTrigger('alt', 'alt')).toBe(true);
@@ -329,6 +330,45 @@ describe('emote key clashes', () => {
   });
 });
 
+describe('action wheel settings', () => {
+  it('defaults to Shift and carries the default action wheel', () => {
+    const s = normalizeSettings(undefined);
+    expect(s.actionTrigger).toBe('shift');
+    expect(s.actionWheel.map((a) => a.kind)).toEqual([
+      'screenshot', 'muteToggle', 'showDesktop', 'lockScreen',
+      'openBrowser', 'openUrl', 'openApp', 'openFolder',
+    ]);
+  });
+
+  it('turns off an action trigger that clashes with ping or emote', () => {
+    expect(normalizeSettings({ actionTrigger: 'alt' }).actionTrigger).toBe('off');
+    expect(normalizeSettings({ actionTrigger: 'ctrl' }).actionTrigger).toBe('off');
+    expect(normalizeSettings({ trigger: 'shift', emoteTrigger: 'ctrl', actionTrigger: 'win' }).actionTrigger).toBe('win');
+  });
+
+  it('patchClashes rejects any three-wheel trigger collision', () => {
+    const current = normalizeSettings(undefined);
+    expect(patchClashes(current, { actionTrigger: 'alt' })).toBe(true);
+    expect(patchClashes(current, { actionTrigger: 'shift' })).toBe(false);
+    expect(patchClashes(current, { trigger: 'shift', actionTrigger: 'alt' })).toBe(false);
+  });
+
+  it('overlaySettings carries action slots as copies', () => {
+    const s = normalizeSettings(undefined);
+    const o = overlaySettings(s);
+    expect(o.actionWheel).toEqual(s.actionWheel);
+    expect(o.actionWheel).not.toBe(s.actionWheel);
+    expect(o.actionWheel[0]).not.toBe(s.actionWheel[0]);
+  });
+
+  it('keeps default action wheel slots isolated', () => {
+    const s = normalizeSettings(undefined);
+    expect(s.actionWheel).toEqual(DEFAULT_ACTION_WHEEL);
+    expect(s.actionWheel).not.toBe(DEFAULT_ACTION_WHEEL);
+    expect(s.actionWheel[5].params).not.toBe(DEFAULT_ACTION_WHEEL[5].params);
+  });
+});
+
 describe('mergeSettings', () => {
   it('applies a patch and re-normalizes it', () => {
     const s = mergeSettings(DEFAULT_SETTINGS, { volume: 500, tickSound: false });
@@ -385,6 +425,8 @@ describe('helpers', () => {
       pingSizePx: 110, pingDurationS: 3.2, volume: 70, muted: false, tickSound: true,
       wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
+      language: 'auto',
+      actionWheel: DEFAULT_SETTINGS.actionWheel,
     });
   });
 

@@ -32,6 +32,8 @@ export class SettingsStore extends EventEmitter {
   firstRun = false;
   /** True when load() read an emote key that clashed with another lolPing key and turned it off. */
   emoteKeyClashed = false;
+  /** True when load() read an action key that clashed with another lolPing key and turned it off. */
+  actionKeyClashed = false;
   private current: Settings;
   private timer: NodeJS.Timeout | null = null;
   private writing: Promise<void> = Promise.resolve();
@@ -50,6 +52,7 @@ export class SettingsStore extends EventEmitter {
 
   load(): Settings {
     this.emoteKeyClashed = false;
+    this.actionKeyClashed = false;
     this.firstRun = !existsSync(this.file);
     if (this.firstRun) {
       this.current = normalizeSettings(undefined, this.platform, this.identity);
@@ -64,6 +67,7 @@ export class SettingsStore extends EventEmitter {
       if (Object.keys(this.current).some((k) => !(k in stored))) this.scheduleSave();
       // A file with no emote key (an upgrade) isn't flagged: an old Ctrl user just gets the emote key off.
       this.emoteKeyClashed = 'emoteTrigger' in stored && stored.emoteTrigger !== 'off' && this.current.emoteTrigger === 'off';
+      this.actionKeyClashed = 'actionTrigger' in stored && stored.actionTrigger !== 'off' && this.current.actionTrigger === 'off';
     } catch (err) {
       let backup = 'it was backed up to settings.bak.json';
       try {

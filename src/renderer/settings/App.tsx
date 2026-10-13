@@ -1,6 +1,6 @@
 import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
-  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
+  Apps24Regular, ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
   Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
@@ -13,6 +13,7 @@ import { triggerLabel, type Settings } from '../../shared/settings';
 import type { WheelPatch } from '../../shared/wheelLayout';
 import { api } from './api';
 import { AboutSection } from './components/AboutSection';
+import { ActionSection } from './components/ActionSection';
 import { EmoteSection } from './components/EmoteSection';
 import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
@@ -37,6 +38,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
   { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
   { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
   { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
+  { id: 'actions', label: (t) => t.navActions, icon: <Apps24Regular /> },
   { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
   { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
 ];
@@ -151,7 +153,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
               {customTrigger ? <span className="desc">{t.customKeyNote}</span> : null}
             </>
           )}>
-          <TriggerPicker value={s.trigger} blocked={s.emoteTrigger}
+          <TriggerPicker value={s.trigger} blockedList={[s.emoteTrigger, s.actionTrigger]}
             onChange={(k) => { if (k !== 'off') void update({ trigger: k }); }} />
         </SettingRow>
         <SliderRow limit="dragThresholdPx" icon={<ArrowMove24Regular />} title={t.dragDistance} description={t.dragDistanceDesc}
@@ -194,6 +196,9 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
 
         <div className="section" id="emotes">{t.navEmotes}</div>
         <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
+
+        <div className="section" id="actions">{t.navActions}</div>
+        <ActionSection settings={s} update={update} />
 
         <div className="section" id="room">{t.navRoom}</div>
         <RoomSection settings={s} update={update} />

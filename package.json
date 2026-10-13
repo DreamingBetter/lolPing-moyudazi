@@ -18,7 +18,7 @@
     "test": "vitest run",
     "build:helper": "node native/hook-helper/run.mjs build",
     "test:helper": "node native/hook-helper/run.mjs test",
-    "dist": "npm run build:helper && electron-vite build && electron-builder --win --publish never",
+    "dist": "npm run build:helper && electron-vite build && node tools/build-win.mjs",
     "dist:mac": "npm run build:helper && electron-vite build && electron-builder --mac --arm64 --publish never",
     "dev:site": "vite --config site/vite.config.ts",
     "build:site": "vite build --config site/vite.config.ts",

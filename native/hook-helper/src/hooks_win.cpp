@@ -158,6 +158,7 @@ int runHooks(Output& out) {
         case Command::Kind::Config: apply(decision.setConfig(c.config)); break;
         case Command::Kind::SetEnabled: apply(decision.setEnabled(c.flag)); break;
         case Command::Kind::Suspend: apply(decision.setSuspended(c.flag)); break;
+        case Command::Kind::InjectKeys: sendInjects(c.injects); break;
         case Command::Kind::Shutdown: PostQuitMessage(0); break;
         default: out.error("invalid command: " + *text); break;
       }

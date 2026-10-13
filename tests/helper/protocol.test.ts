@@ -7,10 +7,10 @@ import { describe, expect, it } from 'vitest';
 import { parseHelperLine, type HelperEvent } from '../../src/shared/protocol';
 
 const exe = resolve(__dirname, '../../native/hook-helper/build', process.platform === 'win32' ? 'hook-helper.exe' : 'hook-helper');
-const ALT = 164, CTRL = 162, KEY_P = 80;
+const ALT = 164, CTRL = 162, WIN = 91, KEY_P = 80;
 const config = {
   type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false,
-  dragThresholdPx: 8, toggleMods: 3, toggleVk: 80, enabled: true,
+  actionTrigger: 'win', actionTriggerVk: 0, dragThresholdPx: 8, toggleMods: 3, toggleVk: 80, enabled: true,
 };
 
 async function simulate(lines: object[]): Promise<HelperEvent[]> {
@@ -72,6 +72,21 @@ describe('hook-helper --simulate', () => {
     expect(simLines.map((e) => (e.type === 'sim' ? e.swallow : null))).toEqual([false, true, false, true]);
   });
 
+  it('opens and releases the action wheel on Win+drag', async () => {
+    const events = await simulate([
+      config,
+      sim('kdown', { vk: WIN }),
+      sim('mdown', { btn: 'left', x: 100, y: 100 }),
+      sim('move', { x: 130, y: 100 }),
+      sim('mup', { btn: 'left', x: 140, y: 90 }),
+    ]);
+    expect(events.filter((e) => e.type !== 'sim' && e.type !== 'ready')).toEqual([
+      { type: 'wheelOpen', x: 100, y: 100, wheel: 'action' },
+      { type: 'wheelMove', x: 130, y: 100, wheel: 'action' },
+      { type: 'wheelRelease', x: 140, y: 90, wheel: 'action' },
+    ]);
+  });
+
   it('leaves Ctrl+drag alone when the emote key is off', async () => {
     const events = await simulate([
       { ...config, emoteTrigger: 'off' },
@@ -99,6 +114,11 @@ describe('hook-helper --simulate', () => {
       config, sim('kdown', { vk: CTRL }), sim('kdown', { vk: ALT }), sim('kdown', { vk: KEY_P }),
     ]);
     expect(events).toContainEqual({ type: 'toggled', enabled: false });
+  });
+
+  it('injects key chords through the helper', async () => {
+    const events = await simulate([{ type: 'injectKeys', keys: '91,16,83' }]);
+    expect(events.at(-1)).toEqual({ type: 'sim', swallow: false, inject: 'kdown:91,kdown:16,kdown:83,kup:83,kup:16,kup:91' });
   });
 
   it('reports invalid commands as errors', async () => {

@@ -46,6 +46,8 @@ export const OVERLAY_ASSETS = 'overlay:assets';
 export const OVERLAY_PINGED = 'overlay:pinged';
 /** overlay renderer → main: {ref, x, y} of an emote the wheel just placed, so it can be shared with the room. */
 export const OVERLAY_EMOTED = 'overlay:emoted';
+/** overlay renderer → main: {id, x, y} of an action selected from the action wheel. */
+export const OVERLAY_ACTIONED = 'overlay:actioned';
 
 export interface AppStatus {
   enabled: boolean;
@@ -88,6 +90,8 @@ export interface SettingsApi {
   getAbout(): Promise<About>;
   openSettingsFolder(): Promise<void>;
   openProjectPage(): Promise<void>;
+  pickFile(): Promise<string | null>;
+  pickFolder(): Promise<string | null>;
   retryHelper(): Promise<void>;
   setCapturing(on: boolean): Promise<void>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */

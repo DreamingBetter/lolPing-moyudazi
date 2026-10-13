@@ -50,6 +50,7 @@ uint32_t Decision::mods() const {
 }
 
 Decision::Spec Decision::spec(WheelKind k) const {
+  if (k == WheelKind::Action) return {cfg_.actionTrigger, cfg_.actionTriggerVk, false};
   if (k == WheelKind::Emote) return {cfg_.emoteTrigger, cfg_.emoteTriggerVk, cfg_.emoteClick};
   return {cfg_.trigger, cfg_.triggerVk, cfg_.clickPing};
 }
@@ -224,9 +225,9 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
       cancelGesture(r);
       return;
     }
-    // Caps Lock and custom-key triggers of either wheel would toggle or type: keep them from the OS.
+    // Caps Lock and custom-key triggers of any wheel would toggle or type: keep them from the OS.
     const auto ownKey = [&](WheelKind k) { return isKeyTrigger(k) && vk == keyTriggerVk(k); };
-    if (ownKey(WheelKind::Ping) || ownKey(WheelKind::Emote)) {
+    if (ownKey(WheelKind::Ping) || ownKey(WheelKind::Emote) || ownKey(WheelKind::Action)) {
       r.swallow = true;
       swallowKeyUps_.insert(vk);
       return;
@@ -281,15 +282,17 @@ void Decision::onMouseDown(const InputEvent& e, Result& r) {
     return;
   }
   if (state_ != State::Idle) return;
-  // Exactly one wheel's trigger must claim the press. When both do (Alt and Ctrl held), it's ambiguous:
+  // Exactly one wheel's trigger must claim the press. When several do, it's ambiguous:
   // pass it through untouched rather than guess.
   const bool ping = startsGesture(WheelKind::Ping, e.btn);
   const bool emote = startsGesture(WheelKind::Emote, e.btn);
-  if (ping != emote) {
+  const bool action = startsGesture(WheelKind::Action, e.btn);
+  const int claims = (ping ? 1 : 0) + (emote ? 1 : 0) + (action ? 1 : 0);
+  if (claims == 1) {
     r.swallow = true;
     markSwallow();
     state_ = State::Pending;
-    owner_ = ping ? WheelKind::Ping : WheelKind::Emote;
+    owner_ = ping ? WheelKind::Ping : emote ? WheelKind::Emote : WheelKind::Action;
     dragBtn_ = e.btn;
     px_ = e.x;
     py_ = e.y;

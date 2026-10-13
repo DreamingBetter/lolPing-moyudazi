@@ -1,8 +1,11 @@
 import { DEFAULT_CLICK_EMOTE, EMOTE_CATALOG } from '../../shared/emoteCatalog';
+import { actionDescription, actionDisplayName } from '../../shared/actionDisplay';
 import {
   allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteIconUrl, emoteSoundUrl, isBundledEmote,
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
+import { actionIconUrl } from '../../shared/actions';
+import { resolveLang, strings } from '../../shared/i18n';
 import {
   DEFAULT_CLICK_PING, TICK_SOUND, allSoundNames, allTextureNames, pingById, pingsFor, soundUrl, textureUrl, type PingDef,
 } from '../../shared/pings';
@@ -23,6 +26,9 @@ const pingSvg = document.getElementById('wheel') as unknown as SVGSVGElement;
 const emoteSvg = pingSvg.cloneNode(false) as SVGSVGElement;
 emoteSvg.id = 'emoteWheel';
 pingSvg.after(emoteSvg);
+const actionSvg = pingSvg.cloneNode(false) as SVGSVGElement;
+actionSvg.id = 'actionWheel';
+emoteSvg.after(actionSvg);
 const emoteLayer = document.createElement('div');
 emoteLayer.id = 'emotes';
 pingLayer.after(emoteLayer);
@@ -38,8 +44,19 @@ const tick = (): void => {
 };
 const pingWheel = new Wheel(pingSvg, 'PING', textureUrl('generic_ping'), tick);
 const emoteWheel = new Wheel(emoteSvg, 'EMOTE', emoteIconUrl(DEFAULT_CLICK_EMOTE), tick);
+const actionWheel = new Wheel(actionSvg, 'ACTION', actionIconUrl('app'), tick);
 
 const pingItem = (p: PingDef): WheelItem => ({ key: p.id, icon: textureUrl(p.icon) });
+const text = () => strings(resolveLang(settings.language, navigator.language));
+const actionItem = (slot: OverlaySettings['actionWheel'][number]): WheelItem => {
+  const t = text();
+  return {
+    key: slot.id,
+    icon: actionIconUrl(slot.icon),
+    label: actionDisplayName(slot, t),
+    description: actionDescription(slot, t),
+  };
+};
 
 /** A wheel slot's icon: the bundled emote's, the imported emote's still, or the generic ping for one that isn't known. */
 function emoteItem(ref: EmoteRef): WheelItem {
@@ -61,6 +78,7 @@ function applySettings(s: OverlaySettings): void {
   settings = s;
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
   emoteWheel.setItems(s.emoteWheel.map(emoteItem));
+  actionWheel.setItems(s.actionWheel.map(actionItem));
 }
 applySettings(settings);
 
@@ -74,7 +92,8 @@ function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag
   if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound && settings.emoteSound) sounds.play(`emote:${art.slug}`, volume());
 }
 
-const wheelOf = (p: { wheel?: WheelKind }): Wheel => (p.wheel === 'emote' ? emoteWheel : pingWheel);
+const wheelOf = (p: { wheel?: WheelKind }): Wheel =>
+  (p.wheel === 'emote' ? emoteWheel : p.wheel === 'action' ? actionWheel : pingWheel);
 
 window.overlay.on('overlay:settings', applySettings);
 window.overlay.on('wheel:open', (p) => wheelOf(p).open(p.x, p.y));
@@ -82,7 +101,9 @@ window.overlay.on('wheel:move', (p) => wheelOf(p).move(p.x, p.y));
 window.overlay.on('wheel:release', (p) => {
   const chosen = wheelOf(p).release(p.x, p.y);
   if (!chosen) return;
-  if (p.wheel === 'emote') {
+  if (p.wheel === 'action') {
+    window.overlay.reportAction(chosen.key, chosen.x, chosen.y);
+  } else if (p.wheel === 'emote') {
     emote('self', localArt(chosen.key), chosen.x, chosen.y);
     window.overlay.reportEmote(chosen.key, chosen.x, chosen.y);
   } else {
@@ -94,6 +115,7 @@ window.overlay.on('wheel:release', (p) => {
 window.overlay.on('wheel:cancel', () => {
   pingWheel.cancel();
   emoteWheel.cancel();
+  actionWheel.cancel();
 });
 window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag));
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
@@ -125,7 +147,9 @@ function checkImages(): Promise<string[]> {
   const emotes = allEmoteAssetFiles()
     .filter((file) => !file.endsWith('.ogg'))
     .map((file) => probeHead(`../${file}`, file));
-  return Promise.all([...pings, ...emotes]).then((r) => r.filter((x): x is string => x !== null));
+  const actions = [...new Set(settings.actionWheel.map((a) => a.icon))]
+    .map((icon) => probe(actionIconUrl(icon), `actions/${icon}.svg`));
+  return Promise.all([...pings, ...emotes, ...actions]).then((r) => r.filter((x): x is string => x !== null));
 }
 
 const soundEntries = [

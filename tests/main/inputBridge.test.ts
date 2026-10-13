@@ -1,6 +1,6 @@
 import type { EventEmitter } from 'node:events';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InputBridge } from '../../src/main/inputBridge';
 import { RestartPolicy } from '../../src/main/restartPolicy';
 import type { HelperEvent } from '../../src/shared/protocol';
@@ -46,10 +46,20 @@ describe('InputBridge', () => {
     const b = bridge('echo');
     b.send({
       type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false,
-      dragThresholdPx: 8, toggleMods: 3, toggleVk: 80, enabled: true,
+      actionTrigger: 'win', actionTriggerVk: 0, dragThresholdPx: 8, toggleMods: 3, toggleVk: 80, enabled: true,
     });
     const echoed = waitFor<HelperEvent>(b, 'event', (e) => e.type === 'error' && e.message === 'got:config');
     b.start();
+    await echoed;
+  });
+
+  it('sends helper key injection commands', async () => {
+    const b = bridge('echo');
+    const running = waitFor<string>(b, 'status', (s) => s === 'running');
+    b.start();
+    await running;
+    const echoed = waitFor<HelperEvent>(b, 'event', (e) => e.type === 'error' && e.message === 'got:injectKeys');
+    b.injectKeys([0x5b, 0x10, 0x53]);
     await echoed;
   });
 
@@ -83,6 +93,25 @@ describe('InputBridge', () => {
     const failed = waitFor<string>(b, 'status', (s) => s === 'failed');
     expect(() => b.start()).not.toThrow();
     await failed;
+  });
+
+  it('reports a helper that Windows refuses to spawn as failed instead of throwing', async () => {
+    vi.resetModules();
+    vi.doMock('node:child_process', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('node:child_process')>();
+      return {
+        ...actual,
+        spawn: () => {
+          throw Object.assign(new Error('spawn EPERM'), { code: 'EPERM' });
+        },
+      };
+    });
+    const { InputBridge: MockedBridge } = await import('../../src/main/inputBridge');
+    const b = new MockedBridge({ command: 'blocked-helper.exe', policy: new RestartPolicy([10, 10, 10], 3) });
+    const failed = waitFor<string>(b, 'status', (s) => s === 'failed');
+    expect(() => b.start()).not.toThrow();
+    await failed;
+    vi.doUnmock('node:child_process');
   });
 
   it('stop() settles even when the helper never spawned', async () => {

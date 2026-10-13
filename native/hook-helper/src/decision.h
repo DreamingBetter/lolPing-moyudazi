@@ -22,8 +22,8 @@ struct InputEvent {
 
 enum class Trigger { Alt, Ctrl, Shift, Win, CapsLock, Mouse4, Mouse5, CustomVk, None };  // None: no trigger (emote key off)
 
-// The two wheels a gesture can open: each has its own trigger.
-enum class WheelKind { Ping, Emote };
+// The wheels a gesture can open: each has its own trigger.
+enum class WheelKind { Ping, Emote, Action };
 
 constexpr uint32_t ModCtrl = 1;
 constexpr uint32_t ModAlt = 2;
@@ -37,6 +37,8 @@ struct Config {
   Trigger emoteTrigger = Trigger::None;  // the emote wheel's
   uint32_t emoteTriggerVk = 0;           // only for Trigger::CustomVk
   bool emoteClick = false;
+  Trigger actionTrigger = Trigger::Win;  // the action wheel's
+  uint32_t actionTriggerVk = 0;          // only for Trigger::CustomVk
   int dragThresholdPx = 8;
   uint32_t toggleMods = ModCtrl | ModAlt;
   uint32_t toggleVk = 0x50;  // 'P'
@@ -92,7 +94,7 @@ class Decision {
   const Config& config() const { return cfg_; }
 
  private:
-  // One wheel's trigger settings, read from the ping or emote fields of cfg_.
+  // One wheel's trigger settings, read from the ping, emote, or action fields of cfg_.
   struct Spec {
     Trigger trigger;
     uint32_t vk;  // only for Trigger::CustomVk

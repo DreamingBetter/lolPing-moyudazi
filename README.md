@@ -57,6 +57,7 @@ Updating from v0.4 or earlier: download the new version by hand once. From v0.5 
 | --- | --- |
 | Ping | Hold **Alt**, drag, and let go on a slice |
 | Emote | Hold **Ctrl**, drag, and let go on an emote |
+| Run an action from the action wheel | Hold **Shift** and drag, then let go on an action |
 | Cancel | Let go in the centre, right-click, or press **Esc** |
 | Pause or resume pinging | **Ctrl + Alt + P** |
 | Open settings | Click the tray icon |
@@ -76,6 +77,7 @@ The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist
 - **Pings and sound:** size, duration, volume, mute and the wheel's tick sound.
 - **Wheel:** drag any ping onto any slice, including Bait and Vision Cleared, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
 - **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only.
+- **Action wheel:** the action key (Shift by default, or off), 8 wheel slots, a built-in action library, and parameters for URLs, apps, files, folders and volume steps. Drag an action from the library onto a slot; actions that need details open a dialog first and are placed only after valid configuration. Click an existing configurable slot to edit it. Hover an action to see what it does and whether it needs configuration.
 - **Launch at Windows startup** (**Open at login** on a Mac): starts hidden in the tray or menu bar.
 - **Language:** follows the system display language, or pick English or 简体中文.
 
@@ -113,6 +115,7 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - Exclusive-fullscreen games draw above the overlay.
 - Sharing a single window doesn't include the pings. Share your entire screen instead.
 - While lolPing is on, Ctrl + drag opens the emote wheel instead of copying files or text. Pick another emote key, or turn it off, in Settings → Emotes.
+- Desktop operations in the action wheel are Windows-first; on a Mac, unsupported actions may show a toast instead of running.
 - On a Mac, the wheel can't open while a secure screen is showing, such as the login window or a password prompt, and Accessibility has to be allowed again after each update.
 
 ## Build from source

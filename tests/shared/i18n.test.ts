@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ActionKind } from '../../src/shared/actions';
 import { resolveLang, strings } from '../../src/shared/i18n';
 import { ALL_PINGS } from '../../src/shared/pings';
 import { normalizeSettings, triggerLabel } from '../../src/shared/settings';
@@ -32,6 +33,23 @@ describe('language', () => {
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort());
     for (const p of ALL_PINGS) expect(zh.pingNames[p.id], p.id).toBeTruthy();
     expect(zh.limitations).toHaveLength(en.limitations.length);
+  });
+
+  it('describes every action in both languages', () => {
+    const en = strings('en');
+    const zh = strings('zh-CN');
+    for (const kind of Object.keys(en.actionDescriptions) as ActionKind[]) {
+      expect(en.actionDescriptions[kind], `English ${kind}`).toBeTruthy();
+      expect(zh.actionDescriptions[kind], `Chinese ${kind}`).toBeTruthy();
+    }
+    expect(en.actionDescriptions.openUrl).toContain('configured');
+    expect(en.actionDescriptions.openApp).toContain('configured');
+    expect(en.actionDescriptions.volumeUp).toContain('step');
+    expect(en.actionDescriptions.volumeDown).toContain('step');
+    expect(zh.actionDescriptions.openUrl).toContain('配置');
+    expect(zh.actionDescriptions.openApp).toContain('配置');
+    expect(zh.actionDescriptions.volumeUp).toContain('步进');
+    expect(zh.actionDescriptions.volumeDown).toContain('步进');
   });
 
   it('has the same Mac wording in both languages', () => {

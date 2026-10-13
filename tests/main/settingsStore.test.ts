@@ -27,8 +27,9 @@ describe('SettingsStore', () => {
   it('saves the defaults it filled in, so the tag colour stays the same on the next launch', async () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 })); // a 0.2.1 file: no room keys
-    const first = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 3 }).load();
-    await sleep(80);
+    const firstStore = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 3 });
+    const first = firstStore.load();
+    await firstStore.flush();
     const second = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 6 }).load();
     expect([first.tagColor, second.tagColor]).toEqual([3, 3]);
     expect(second.volume).toBe(30);
@@ -36,8 +37,9 @@ describe('SettingsStore', () => {
 
   it('saves on the very first run too', async () => {
     const dir = tempDir();
-    new SettingsStore(dir, 10, 'win', { name: 'darren', color: 2 }).load();
-    await sleep(80);
+    const store = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 2 });
+    store.load();
+    await store.flush();
     expect(new SettingsStore(dir, 10, 'win', { name: 'darren', color: 7 }).load().tagColor).toBe(2);
   });
 
@@ -83,11 +85,41 @@ describe('SettingsStore', () => {
     expect(store.emoteKeyClashed).toBe(true);
   });
 
+  it('flags an action key clash from a hand-edited file', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ trigger: 'shift', emoteTrigger: 'ctrl', actionTrigger: 'shift' }));
+    const store = new SettingsStore(dir);
+    expect(store.load().actionTrigger).toBe('off');
+    expect(store.actionKeyClashed).toBe(true);
+  });
+
+  it('does not flag the default action key filled in for an older file', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ trigger: 'win', emoteTrigger: 'ctrl' }));
+    const store = new SettingsStore(dir);
+    expect(store.load().actionTrigger).toBe('shift');
+    expect(store.actionKeyClashed).toBe(false);
+  });
+
+  it('resets action key clash tracking on each load', () => {
+    const dir = tempDir();
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ trigger: 'shift', emoteTrigger: 'ctrl', actionTrigger: 'shift' }));
+    const store = new SettingsStore(dir);
+    store.load();
+    expect(store.actionKeyClashed).toBe(true);
+
+    writeFileSync(file, JSON.stringify({ trigger: 'alt', emoteTrigger: 'ctrl', actionTrigger: 'win' }));
+    store.load();
+    expect(store.actionKeyClashed).toBe(false);
+  });
+
   it('saves the emote fields it filled in for an older file', async () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 }));
-    new SettingsStore(dir, 10).load();
-    await sleep(80);
+    const store = new SettingsStore(dir, 10);
+    store.load();
+    await store.flush();
     expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))).toMatchObject({ emoteTrigger: 'ctrl', emoteSizePx: 150, customEmotes: [] });
   });
 

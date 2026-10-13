@@ -1,7 +1,7 @@
 import type { Settings } from './settings';
 
-/** Which wheel a gesture belongs to: the ping trigger's or the emote key's. */
-export type WheelKind = 'ping' | 'emote';
+/** Which wheel a gesture belongs to: the ping trigger's, the emote key's, or the action key's. */
+export type WheelKind = 'ping' | 'emote' | 'action';
 
 /**
  * Messages the hook helper writes to stdout, one JSON object per line.
@@ -50,8 +50,9 @@ export function parseHelperLine(line: string): HelperEvent | null {
         : null;
     default:
       if (typeof o.type === 'string' && POINT_TYPES.has(o.type) && isInt(o.x) && isInt(o.y)) {
-        // Anything but "emote" (including no field, from a version 1 helper) is the ping wheel.
-        return { type: o.type as PointType, x: o.x, y: o.y, wheel: o.wheel === 'emote' ? 'emote' : 'ping' };
+        // Anything but a known wheel (including no field, from a version 1 helper) is the ping wheel.
+        const wheel = o.wheel === 'emote' || o.wheel === 'action' ? o.wheel : 'ping';
+        return { type: o.type as PointType, x: o.x, y: o.y, wheel };
       }
       return null;
   }
@@ -70,6 +71,9 @@ export type HelperCommand =
       emoteTrigger: HelperTrigger | 'off';
       emoteTriggerVk: number;
       emoteClick: boolean;
+      /** 'off': no action key, so no action gestures. */
+      actionTrigger: HelperTrigger | 'off';
+      actionTriggerVk: number;
       dragThresholdPx: number;
       toggleMods: number;
       toggleVk: number;
@@ -77,11 +81,13 @@ export type HelperCommand =
     }
   | { type: 'setEnabled'; enabled: boolean }
   | { type: 'suspend'; on: boolean }
+  | { type: 'injectKeys'; keys: number[] }
   | { type: 'shutdown' };
 
 export function configCommand(s: Settings, enabled: boolean): HelperCommand {
   const t = s.trigger;
   const e = s.emoteTrigger;
+  const a = s.actionTrigger;
   return {
     type: 'config',
     trigger: typeof t === 'object' ? 'vk' : t,
@@ -90,6 +96,8 @@ export function configCommand(s: Settings, enabled: boolean): HelperCommand {
     emoteTrigger: typeof e === 'object' ? 'vk' : e,
     emoteTriggerVk: typeof e === 'object' ? e.vk : 0,
     emoteClick: s.emoteClick,
+    actionTrigger: typeof a === 'object' ? 'vk' : a,
+    actionTriggerVk: typeof a === 'object' ? a.vk : 0,
     dragThresholdPx: s.dragThresholdPx,
     toggleMods: s.toggleHotkey.mods,
     toggleVk: s.toggleHotkey.vk,
@@ -97,4 +105,7 @@ export function configCommand(s: Settings, enabled: boolean): HelperCommand {
   };
 }
 
-export const serializeCommand = (c: HelperCommand): string => `${JSON.stringify(c)}\n`;
+export function serializeCommand(c: HelperCommand): string {
+  if (c.type === 'injectKeys') return `${JSON.stringify({ type: 'injectKeys', keys: c.keys.join(',') })}\n`;
+  return `${JSON.stringify(c)}\n`;
+}

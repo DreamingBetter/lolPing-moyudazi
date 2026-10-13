@@ -18,6 +18,7 @@ describe('parseHelperLine', () => {
 
   it('says which wheel a point event belongs to, defaulting to the ping wheel', () => {
     expect(parseHelperLine('{"type":"wheelOpen","x":1,"y":2,"wheel":"emote"}')).toEqual({ type: 'wheelOpen', x: 1, y: 2, wheel: 'emote' });
+    expect(parseHelperLine('{"type":"wheelOpen","x":1,"y":2,"wheel":"action"}')).toEqual({ type: 'wheelOpen', x: 1, y: 2, wheel: 'action' });
     expect(parseHelperLine('{"type":"click","x":1,"y":2,"wheel":"emote"}')).toEqual({ type: 'click', x: 1, y: 2, wheel: 'emote' });
     expect(parseHelperLine('{"type":"wheelMove","x":1,"y":2,"wheel":"ping"}')).toEqual({ type: 'wheelMove', x: 1, y: 2, wheel: 'ping' });
     for (const wheel of ['"EMOTE"', '"mystery"', '1', 'true', 'null', '{}']) {
@@ -39,7 +40,7 @@ describe('commands', () => {
     expect(configCommand(DEFAULT_SETTINGS, true)).toEqual({
       type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false,
       emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false, dragThresholdPx: 8,
-      toggleMods: 3, toggleVk: 0x50, enabled: true,
+      actionTrigger: 'shift', actionTriggerVk: 0, toggleMods: 3, toggleVk: 0x50, enabled: true,
     });
   });
 
@@ -61,5 +62,10 @@ describe('commands', () => {
     const line = serializeCommand({ type: 'suspend', on: true });
     expect(line).toBe('{"type":"suspend","on":true}\n');
     expect(line.indexOf('\n')).toBe(line.length - 1);
+  });
+
+  it('serializes helper key injection commands', () => {
+    expect(serializeCommand({ type: 'injectKeys', keys: [0x5b, 0x10, 0x53] }))
+      .toBe('{"type":"injectKeys","keys":"91,16,83"}\n');
   });
 });

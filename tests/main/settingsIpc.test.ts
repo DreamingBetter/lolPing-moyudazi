@@ -19,6 +19,9 @@ vi.mock('electron', () => ({
   ipcMain: { handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => h.handlers.set(channel, fn) },
   globalShortcut: { register: () => true, unregister: () => undefined },
   shell: { openExternal: async (url: string) => void h.opened.push(url) },
+  dialog: {
+    showOpenDialog: vi.fn(async (_opts: unknown) => ({ canceled: false, filePaths: ['C:\\Picked\\thing.exe'] })),
+  },
   net: {},
   protocol: {},
 }));
@@ -66,6 +69,16 @@ describe('settings IPC', () => {
     expect(await call(SETTINGS_CH.set, null)).toMatchObject({ ok: true, settings: { volume: store.get().volume } });
   });
 
+  it('setSettings explains wheel key clashes with the shared trigger rule', async () => {
+    const result = await call(SETTINGS_CH.set, { actionTrigger: 'alt' });
+    expect(result).toMatchObject({
+      ok: false,
+      error: 'The ping trigger, emote key and action key must be different, and custom wheel keys cannot be the pause shortcut key.',
+      settings: { actionTrigger: 'shift' },
+    });
+    expect(store.get().actionTrigger).toBe('shift');
+  });
+
   it('imports an emote: the files are saved and the entry is added', async () => {
     const s = still(1);
     expect(await call(SETTINGS_CH.emoteImport, { name: 'cat', still: s })).toEqual({ ok: true, id: idOf(s) });
@@ -109,6 +122,17 @@ describe('settings IPC', () => {
     await call(SETTINGS_CH.emoteImport, { name: 'x', still: s });
     for (const raw of [null, 'facepalm', '../settings', { id: idOf(s) }]) await call(SETTINGS_CH.emoteRemove, raw);
     expect(store.get().customEmotes).toHaveLength(1);
+  });
+
+  it('opens file and folder pickers', async () => {
+    expect(await call(SETTINGS_CH.pickFile)).toBe('C:\\Picked\\thing.exe');
+    expect(await call(SETTINGS_CH.pickFolder)).toBe('C:\\Picked\\thing.exe');
+  });
+
+  it('returns null when a picker is cancelled', async () => {
+    const electron = await import('electron');
+    vi.mocked(electron.dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    expect(await call(SETTINGS_CH.pickFile)).toBeNull();
   });
 });
 

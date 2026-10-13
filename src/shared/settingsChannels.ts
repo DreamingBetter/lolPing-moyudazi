@@ -13,6 +13,8 @@ export const SETTINGS_CH = {
   about: 'app:about',
   openFolder: 'app:openSettingsFolder',
   openProject: 'app:openProjectPage',
+  pickFile: 'dialog:pickFile',
+  pickFolder: 'dialog:pickFolder',
   retryHelper: 'app:retryHelper',
   capture: 'app:capture',
   openAccessibility: 'app:openAccessibility',

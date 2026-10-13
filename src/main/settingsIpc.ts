@@ -1,4 +1,4 @@
-import { globalShortcut, ipcMain, shell } from 'electron';
+import { dialog, globalShortcut, ipcMain, shell } from 'electron';
 import { isCustomRef, isEmoteRefShape, type EmoteRef, type ImportResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from '../shared/ipc';
@@ -79,7 +79,7 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.set, (_e, raw: unknown): SetSettingsResult => {
     const patch = rendererPatch(raw);
     if (patchClashes(d.store.get(), patch, d.platform)) {
-      return { ok: false, error: d.text().emoteKeyClash, settings: d.store.get() };
+      return { ok: false, error: d.text().actionKeyClash, settings: d.store.get() };
     }
     if (patch.toggleHotkey) {
       const error = hotkeyConflict(patch.toggleHotkey, d.store.get().toggleHotkey, d.text(), d.platform);
@@ -116,6 +116,14 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   });
   ipcMain.handle(SETTINGS_CH.openProject, async () => {
     await shell.openExternal(PROJECT_URL);
+  });
+  ipcMain.handle(SETTINGS_CH.pickFile, async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({ properties: ['openFile'] });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+  ipcMain.handle(SETTINGS_CH.pickFolder, async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0] ?? null;
   });
   ipcMain.handle(SETTINGS_CH.retryHelper, () => d.retryHelper());
   ipcMain.handle(SETTINGS_CH.capture, (_e, on: unknown) => d.setCapturing(on === true));

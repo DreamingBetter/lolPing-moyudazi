@@ -79,6 +79,12 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .weImportError { font-size: 12px; line-height: 16px; color: #ff9c48; overflow-wrap: anywhere; }
 .weHint { min-height: 16px; margin-top: 10px; font-size: 12px; line-height: 16px; color: var(--text3); }
 @media (max-width: 860px) { .weBody { grid-template-columns: 1fr; justify-items: center; } }
+.actionConfigSurface.compact { width: fit-content; max-width: calc(100vw - 96px); }
+.actionConfigDialog { display: grid; gap: 12px; min-width: min(440px, calc(100vw - 96px)); }
+.actionConfigSurface.compact .actionConfigDialog { min-width: 0; width: fit-content; }
+.actionPathRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.actionVolumeRow { display: flex; gap: 10px; align-items: center; justify-content: flex-start; }
+.actionConfigSurface.compact .actionVolumeRow .fui-Slider { width: min(240px, calc(100vw - 180px)); }
 .rowError { margin: 1px 0 4px; padding: 0 20px 0 60px; font-size: 12px; line-height: 16px; color: #ff9c48; }
 .keys { display: flex; align-items: center; gap: 4px; }
 .keys kbd { font: 600 12px "Segoe UI"; padding: 3px 8px; border-radius: 4px; background: var(--colorBrandBackground); color: var(--colorNeutralForegroundOnBrand); }
