@@ -127,6 +127,71 @@ describe('room settings', () => {
   });
 });
 
+describe('chat danmaku settings', () => {
+  it('has default danmaku settings', () => {
+    expect(normalizeSettings(undefined)).toMatchObject({
+      chatDanmakuEnabled: true,
+      chatDanmakuArea: 'half',
+      chatDanmakuSpeed: 'normal',
+      chatDanmakuSizePx: 24,
+      chatDanmakuOpacity: 85,
+    });
+  });
+
+  it('keeps valid danmaku settings', () => {
+    expect(normalizeSettings({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'full',
+      chatDanmakuSpeed: 'fast',
+      chatDanmakuSizePx: 36,
+      chatDanmakuOpacity: 40,
+    })).toMatchObject({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'full',
+      chatDanmakuSpeed: 'fast',
+      chatDanmakuSizePx: 36,
+      chatDanmakuOpacity: 40,
+    });
+  });
+
+  it('falls back or clamps invalid danmaku settings', () => {
+    expect(normalizeSettings({
+      chatDanmakuEnabled: 'yes',
+      chatDanmakuArea: 'bad',
+      chatDanmakuSpeed: 'warp',
+      chatDanmakuSizePx: 6,
+      chatDanmakuOpacity: 130,
+    })).toMatchObject({
+      chatDanmakuEnabled: true,
+      chatDanmakuArea: 'half',
+      chatDanmakuSpeed: 'normal',
+      chatDanmakuSizePx: 16,
+      chatDanmakuOpacity: 100,
+    });
+    expect(normalizeSettings({ chatDanmakuSizePx: 24.4, chatDanmakuOpacity: 84.6 })).toMatchObject({
+      chatDanmakuSizePx: 24,
+      chatDanmakuOpacity: 85,
+    });
+  });
+
+  it('includes danmaku settings in overlay settings', () => {
+    const s = normalizeSettings({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'quarter',
+      chatDanmakuSpeed: 'slow',
+      chatDanmakuSizePx: 18,
+      chatDanmakuOpacity: 70,
+    });
+    expect(overlaySettings(s)).toMatchObject({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'quarter',
+      chatDanmakuSpeed: 'slow',
+      chatDanmakuSizePx: 18,
+      chatDanmakuOpacity: 70,
+    });
+  });
+});
+
 describe('emote settings', () => {
   const hash = (c: string) => `c:${c.repeat(32)}`;
   const entry = (c: string, name = 'Mine', animated = false) => ({ id: hash(c), name, animated });
@@ -428,6 +493,7 @@ describe('helpers', () => {
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
       language: 'auto',
       actionWheel: DEFAULT_SETTINGS.actionWheel,
+      chatDanmakuEnabled: true, chatDanmakuArea: 'half', chatDanmakuSpeed: 'normal', chatDanmakuSizePx: 24, chatDanmakuOpacity: 85,
     });
   });
 

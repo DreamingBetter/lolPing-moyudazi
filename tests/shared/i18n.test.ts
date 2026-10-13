@@ -90,6 +90,22 @@ describe('language', () => {
     }
   });
 
+  it('names chat danmaku settings', () => {
+    const en = strings('en');
+    expect(en.chatDanmaku).toBe('Chat danmaku');
+    expect(en.chatDanmakuAreaHalf).toBe('Top half');
+    expect(en.chatDanmakuSpeedNormal).toBe('Normal');
+  });
+
+  it('explains chat send and newline shortcuts in the composer placeholder', () => {
+    const en = strings('en');
+    const zh = strings('zh-CN');
+    expect(en.chatPlaceholder).toContain('Enter to send');
+    expect(en.chatPlaceholder).toContain('Shift+Enter');
+    expect(zh.chatPlaceholder).toContain('Enter发送');
+    expect(zh.chatPlaceholder).toContain('Shift+Enter换行');
+  });
+
   it('defaults to auto and rejects unknown values', () => {
     expect(normalizeSettings({}).language).toBe('auto');
     expect(normalizeSettings({ language: 'zh-CN' }).language).toBe('zh-CN');

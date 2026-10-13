@@ -6,6 +6,7 @@ import {
 } from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
+import type { LiveChatMessage } from '../shared/roomChat';
 import type { OverlaySettings } from '../shared/settings';
 import { physicalToLocal, type DisplayMap } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
@@ -161,6 +162,15 @@ export class OverlayManager extends EventEmitter {
 
   toast(title: string, body: string): void {
     this.send(screen.getPrimaryDisplay().id, 'toast:show', { title, body });
+  }
+
+  spawnChatDanmaku(message: LiveChatMessage): void {
+    this.send(screen.getPrimaryDisplay().id, 'chat:spawn', {
+      id: message.id,
+      name: message.name,
+      color: message.color,
+      text: message.text,
+    });
   }
 
   destroy(): void {

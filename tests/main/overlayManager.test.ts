@@ -4,7 +4,7 @@ import { OVERLAY_ACTIONED, OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shar
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
 const h = vi.hoisted(() => ({
-  windows: [] as Array<{ x: number; webContents: { send: ReturnType<typeof vi.fn> } }>,
+  windows: [] as Array<{ x: number; destroyed: boolean; webContents: { send: ReturnType<typeof vi.fn> } }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
 }));
 
@@ -15,6 +15,7 @@ vi.mock('electron', async () => {
       return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
     }
     x: number;
+    destroyed = false;
     webContents = Object.assign(new Emitter(), { send: vi.fn() });
     constructor(opts: { x: number }) {
       super();
@@ -26,9 +27,11 @@ vi.mock('electron', async () => {
     setBounds(): void {}
     showInactive(): void {}
     isDestroyed(): boolean {
-      return false;
+      return this.destroyed;
     }
-    destroy(): void {}
+    destroy(): void {
+      this.destroyed = true;
+    }
   }
   const displays = [
     { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
@@ -39,6 +42,7 @@ vi.mock('electron', async () => {
     getPrimaryDisplay: () => displays[0],
     dipToScreenRect: (_win: unknown, r: unknown) => r,
   });
+  screen.setMaxListeners(0);
   const ipcMain = { on: (channel: string, fn: (event: unknown, raw: unknown) => void) => h.handlers.set(channel, fn) };
   return { BrowserWindow: FakeWindow, ipcMain, screen };
 });
@@ -196,5 +200,20 @@ describe('OverlayManager remote and preview emotes', () => {
     expect(sent(0)).toEqual([['emote:spawn', { owner: 'preview', art: art('nice', false), x: 960, y: 540 }]]);
     expect(sent(1)).toEqual([]);
     expect(shared).not.toHaveBeenCalled();
+  });
+});
+
+describe('OverlayManager chat danmaku', () => {
+  it('spawns chat danmaku on the primary display only', () => {
+    mgr.spawnChatDanmaku({ id: 'm1', peer: 'p1', name: 'Alex', color: 4, ts: 1, text: 'hello', self: false });
+    expect(sent(0)).toEqual([['chat:spawn', { id: 'm1', name: 'Alex', color: 4, text: 'hello' }]]);
+    expect(sent(1)).toEqual([]);
+  });
+
+  it('drops chat danmaku when the primary overlay is destroyed', () => {
+    h.windows[0].destroyed = true;
+    mgr.spawnChatDanmaku({ id: 'm2', peer: 'p1', name: 'Alex', color: 4, ts: 1, text: 'dropped', self: false });
+    expect(sent(0)).toEqual([]);
+    expect(sent(1)).toEqual([]);
   });
 });

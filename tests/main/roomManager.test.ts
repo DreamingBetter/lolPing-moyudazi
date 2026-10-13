@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
 import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
-import type { RoomChatState } from '../../src/shared/roomChat';
+import type { LiveChatMessage, RoomChatState } from '../../src/shared/roomChat';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
 
@@ -50,6 +50,7 @@ let emotes: RemoteEmote[];
 let toasts: RoomToast[];
 let saved: (string | null)[];
 let chats: RoomChatState[];
+let liveChats: LiveChatMessage[];
 
 function sentMessages(to?: string): RoomMessage[] {
   return lan.sent
@@ -71,6 +72,7 @@ beforeEach(() => {
   toasts = [];
   saved = [];
   chats = [];
+  liveChats = [];
   room = new RoomManager({
     transports: [lan],
     now: () => Date.now(),
@@ -85,6 +87,7 @@ beforeEach(() => {
   room.on('toast', (t: RoomToast) => toasts.push(t));
   room.on('saveCode', (c: string | null) => saved.push(c));
   room.on('chatState', (s: RoomChatState) => chats.push(s));
+  room.on('chatMessage', (m: LiveChatMessage) => liveChats.push(m));
 });
 
 afterEach(() => {
@@ -581,9 +584,18 @@ describe('chat', () => {
     room.muteMember(alex.peer, true);
     const result = room.sendChat('hello');
     expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error('expected chat send to succeed');
     expect(chats.slice(before).map((s) => s.messages.at(-1)?.status)).toEqual(['sending', 'sent']);
     expect(room.chatState().messages).toMatchObject([{ text: 'hello', self: true, status: 'sent' }]);
     expect(sentMessages('lan:alex').filter((m) => m.t === 'chat')).toHaveLength(1);
+    expect(liveChats).toEqual([expect.objectContaining({
+      id: result.id,
+      peer: SELF,
+      name: 'Me',
+      color: 1,
+      text: 'hello',
+      self: true,
+    })]);
   });
 
   it('accepts chat while alone and hands it to a later member', async () => {
@@ -627,6 +639,7 @@ describe('chat', () => {
     expect(first).toMatchObject({ ok: false, error: 'failed' });
     const failed = room.chatState().messages[0];
     expect(failed.status).toBe('failed');
+    expect(liveChats).toEqual([]);
     alex.presence();
     lan.sent = [];
     const retried = room.retryChat(failed.id);
@@ -634,18 +647,34 @@ describe('chat', () => {
     expect(room.chatState().messages).toHaveLength(1);
     expect(room.chatState().messages[0]).toMatchObject({ id: failed.id, status: 'sent' });
     expect(sentMessages('lan:alex').filter((m) => m.t === 'chat').map((m) => m.t === 'chat' && m.id)).toEqual([failed.id]);
+    expect(liveChats).toEqual([expect.objectContaining({
+      id: failed.id,
+      peer: SELF,
+      name: 'Me',
+      color: 1,
+      text: 'retry me',
+      self: true,
+    })]);
   });
 
   it('deduplicates chat packets arriving twice and ignores ping/emote gates', async () => {
     await joinActive();
     const alex = new Remote('1111111111111111', 'lan:alex', lan);
-    alex.presence();
+    alex.presence({ name: 'Alex', color: 4 });
     const packet = alex.packet({ t: 'chat', id: '0123456789abcdef0123456789abcdef', text: 'once' });
     room.setStatusFlags({ paused: true, roomMuted: true });
     room.muteMember(alex.peer, true);
     lan.deliver(alex.key, packet);
     lan.deliver('lan:other', packet);
     expect(room.chatState().messages).toMatchObject([{ text: 'once', self: false }]);
+    expect(liveChats).toEqual([expect.objectContaining({
+      id: '0123456789abcdef0123456789abcdef',
+      peer: alex.peer,
+      name: 'Alex',
+      color: 4,
+      text: 'once',
+      self: false,
+    })]);
   });
 
   it('merges valid history parts from multiple responders, dedupes and keeps the latest 50', async () => {
@@ -670,6 +699,7 @@ describe('chat', () => {
     expect(room.chatState().messages).toHaveLength(50);
     expect(new Set(room.chatState().messages.map((m) => m.id)).size).toBe(50);
     expect(room.chatState().messages[0].id).toBe(ids[1]);
+    expect(liveChats).toEqual([]);
   });
 
   it('does not include a failed local message in history until retry succeeds', async () => {
