@@ -15,6 +15,7 @@ import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
 import { executeAction } from './actionExecutor';
 import { resolveTarget, toShared } from './displayNumbers';
+import { createCursorSkinService } from './cursorSkin';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
 import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
@@ -88,6 +89,12 @@ function start(): void {
   }
   const store = new SettingsStore(settingsDir(), undefined, PLATFORM, { name: osUserName(), color: randomInt(8) });
   let settings = store.load();
+  const cursorSkin = IS_MAC ? undefined : createCursorSkinService({
+    platform: PLATFORM,
+    sourceDir: assetPath('cursors', 'summoner'),
+    installDir: join(settingsDir(), 'cursors', 'summoner'),
+    backupFile: join(settingsDir(), 'cursor-backup.json'),
+  });
   // An imported emote whose still is gone is dropped; normalising the shorter list repairs the wheel slots that used it.
   const kept = library.present(settings.customEmotes);
   if (kept.length !== settings.customEmotes.length) settings = store.update({ customEmotes: kept });
@@ -417,6 +424,7 @@ function start(): void {
     },
     text,
     platform: PLATFORM,
+    cursorSkin,
     update: updater
       ? { state: () => updater.state, notesUrl: () => updater.notesUrl, check: () => updater.check(true), start: () => updater.startUpdate() }
       : undefined,

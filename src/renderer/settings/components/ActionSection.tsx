@@ -31,6 +31,7 @@ import {
   actionParams,
   cloneActionTemplateForSlot,
   isActionConfigurable,
+  localizeActionConfigLabel,
   validateActionConfig,
   withActionConfig,
   type ActionConfigIssue,
@@ -89,6 +90,7 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
   const t = useText();
   const [keyError, setKeyError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ActionSlot | null>(null);
+  const [saving, setSaving] = useState(false);
   const configResolver = useRef<((slot: ActionSlot | null) => void) | null>(null);
   const preparedSlots = useRef(new Map<string, ActionSlot>());
 
@@ -103,26 +105,39 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
 
   const openConfig = (slot: ActionSlot): Promise<ActionSlot | null> => new Promise((resolve) => {
     configResolver.current = resolve;
-    setDraft(copySlot(slot));
+    setDraft(localizeActionConfigLabel(copySlot(slot), t));
   });
 
   const closeConfig = (slot: ActionSlot | null) => {
     const resolve = configResolver.current;
     configResolver.current = null;
     setDraft(null);
+    setSaving(false);
     if (resolve) resolve(slot);
   };
 
-  const saveConfig = () => {
+  const enrichActionIcon = async (slot: ActionSlot): Promise<ActionSlot> => {
+    if (slot.kind !== 'openUrl' && slot.kind !== 'openApp') return slot;
+    if (slot.params?.iconUrl) return slot;
+    const iconUrl = slot.kind === 'openUrl'
+      ? await api.getUrlIcon(slot.params?.url ?? '').catch(() => null)
+      : await api.getFileIcon(slot.params?.path ?? '').catch(() => null);
+    return iconUrl ? { ...slot, params: actionParams(slot.kind, { ...slot.params, iconUrl }) } : slot;
+  };
+
+  const saveConfig = async () => {
     if (!draft) return;
     const configured = withActionConfig(draft, { label: draft.label, params: draft.params });
     if (validateActionConfig(configured)) return;
+    setSaving(true);
+    const enriched = await enrichActionIcon(configured);
+    setSaving(false);
     if (configResolver.current) {
-      closeConfig(configured);
+      closeConfig(enriched);
       return;
     }
     void update({
-      actionWheel: s.actionWheel.map((slot) => (slot.id === configured.id ? configured : slot)),
+      actionWheel: s.actionWheel.map((slot) => (slot.id === enriched.id ? enriched : slot)),
     });
     closeConfig(null);
   };
@@ -132,7 +147,13 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
   };
 
   const updateDraftParams = (params: ActionSlot['params']) => {
-    setDraft((current) => (current ? { ...current, params: actionParams(current.kind, { ...current.params, ...params }) } : current));
+    setDraft((current) => {
+      if (!current) return current;
+      const nextParams = { ...current.params, ...params };
+      if (params?.url !== undefined && params.url !== current.params?.url) delete nextParams.iconUrl;
+      if (params?.path !== undefined && params.path !== current.params?.path) delete nextParams.iconUrl;
+      return { ...current, params: actionParams(current.kind, nextParams) };
+    });
   };
 
   const prepareActionDrop = async (src: WheelSource<ActionPoolId>, target: WheelTarget, patch: WheelPatch<ActionPoolId>): Promise<WheelPatch<ActionPoolId> | null> => {
@@ -154,7 +175,7 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
   const editExistingSlot = (id: ActionPoolId): boolean => {
     const slot = s.actionWheel.find((a) => a.id === id);
     if (!slot || !isActionConfigurable(slot.kind)) return false;
-    setDraft(copySlot(slot));
+    setDraft(localizeActionConfigLabel(copySlot(slot), t));
     return true;
   };
 
@@ -241,7 +262,7 @@ export function ActionSection({ settings: s, update }: { settings: Settings; upd
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => closeConfig(null)}>{t.actionConfigCancel}</Button>
-              <Button appearance="primary" disabled={issue !== null} onClick={saveConfig}>{t.actionConfigSave}</Button>
+              <Button appearance="primary" disabled={issue !== null || saving} onClick={() => void saveConfig()}>{t.actionConfigSave}</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>

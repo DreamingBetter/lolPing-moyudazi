@@ -98,6 +98,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
+  const [cursorSkinError, setCursorSkinError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
   const showSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -213,6 +214,21 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <div className="section" id="app">{t.navApp}</div>
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
           checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
+        {!MAC ? (
+          <SwitchRow icon={<Cursor24Regular />} title={t.cursorSkin}
+            description={(
+              <>
+                {t.cursorSkinDesc}
+                {cursorSkinError ? <span className="desc">{cursorSkinError}</span> : null}
+              </>
+            )}
+            checked={s.cursorSkinEnabled}
+            onChange={(v) => {
+              void update({ cursorSkinEnabled: v }).then((result) => {
+                setCursorSkinError(result.ok ? null : result.error);
+              });
+            }} />
+        ) : null}
         <SettingRow icon={<LocalLanguage24Regular />} title={t.language} description={t.languageDesc}>
           <Dropdown
             style={{ minWidth: 170 }}

@@ -32,7 +32,7 @@ interface WheelOptions {
   hintDelayMs?: number;
 }
 
-const DEFAULT_HINT_DELAY_MS = 1500;
+const DEFAULT_HINT_DELAY_MS = 1200;
 
 /**
  * The League-style wheel (see prototype/wheel-demo.html), for pings or emotes: the slices are whatever items it is given.

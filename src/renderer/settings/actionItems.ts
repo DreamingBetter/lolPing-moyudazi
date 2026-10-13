@@ -1,5 +1,5 @@
 import {
-  ACTION_TEMPLATES, type ActionSlot,
+  ACTION_TEMPLATES, actionSlotIconUrl, type ActionSlot,
 } from '../../shared/actions';
 import { actionDescription, actionDisplayName } from '../../shared/actionDisplay';
 import type { Strings } from '../../shared/i18n';
@@ -20,7 +20,7 @@ export function actionLibraryItems(t: Strings): PoolItem<string>[] {
 export function actionWheelItems(wheel: readonly ActionSlot[], t: Strings): PoolItem<string>[] {
   return wheel.map((slot) => ({
     id: slot.id,
-    icon: `../actions/${slot.icon}.svg`,
+    icon: actionSlotIconUrl(slot),
     name: displayName(slot, t),
     description: actionDescription(slot, t),
   }));

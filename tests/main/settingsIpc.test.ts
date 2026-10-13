@@ -17,13 +17,14 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
+  app: { getFileIcon: vi.fn(async () => ({ isEmpty: () => false, toDataURL: () => 'data:image/png;base64,YXBw' })) },
   ipcMain: { handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => h.handlers.set(channel, fn) },
   globalShortcut: { register: () => true, unregister: () => undefined },
   shell: { openExternal: async (url: string) => void h.opened.push(url) },
   dialog: {
     showOpenDialog: vi.fn(async (_opts: unknown) => ({ canceled: false, filePaths: ['C:\\Picked\\thing.exe'] })),
   },
-  net: {},
+  net: { fetch: vi.fn(async () => new Response('', { status: 404 })) },
   protocol: {},
 }));
 
@@ -67,11 +68,12 @@ beforeEach(() => {
   registerWith();
 });
 
-/** Registers the handlers again, with or without an update checker. */
-function registerWith(update?: SettingsIpcDeps['update']): void {
+/** Registers the handlers again, with optional feature services. */
+function registerWith(update?: SettingsIpcDeps['update'], cursorSkin?: unknown): void {
   h.handlers.clear();
   registerSettingsIpc({
-    store, library, text: () => strings('en'), platform: 'win', room: roomApi, showSection: (section: string) => shown.push(section), update,
+    store, library, text: () => strings('en'), platform: 'win', room: roomApi,
+    showSection: (section: string) => shown.push(section), update, cursorSkin,
   } as unknown as SettingsIpcDeps);
 }
 
@@ -95,6 +97,50 @@ describe('settings IPC', () => {
       settings: { actionTrigger: 'shift' },
     });
     expect(store.get().actionTrigger).toBe('shift');
+  });
+
+  it('applies the cursor skin before saving the enabled switch', async () => {
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: true });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: true } });
+    expect(cursorSkin.applySummoner).toHaveBeenCalledTimes(1);
+    expect(cursorSkin.restoreOriginal).not.toHaveBeenCalled();
+    expect(store.get().cursorSkinEnabled).toBe(true);
+  });
+
+  it('restores the cursor skin before saving the disabled switch', async () => {
+    store.update({ cursorSkinEnabled: true });
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: false });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: false } });
+    expect(cursorSkin.restoreOriginal).toHaveBeenCalledTimes(1);
+    expect(cursorSkin.applySummoner).not.toHaveBeenCalled();
+    expect(store.get().cursorSkinEnabled).toBe(false);
+  });
+
+  it('does not save the cursor switch when the system cursor change fails', async () => {
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: false as const, error: 'PowerShell failed' })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: true });
+
+    expect(result).toMatchObject({ ok: false, error: 'PowerShell failed', settings: { cursorSkinEnabled: false } });
+    expect(store.get().cursorSkinEnabled).toBe(false);
   });
 
   it('imports an emote: the files are saved and the entry is added', async () => {
@@ -171,6 +217,44 @@ describe('settings IPC', () => {
     vi.mocked(roomApi.join).mockResolvedValueOnce({ ok: false, error: 'failed' });
     await call(SETTINGS_CH.roomJoin, 'bad');
     expect(shown).toEqual(['chat', 'chat']);
+  });
+
+  it('returns a local app icon as a data URL', async () => {
+    const electron = await import('electron');
+    const iconUrl = 'data:image/png;base64,YXBwLWljb24=';
+    vi.mocked(electron.app.getFileIcon).mockResolvedValueOnce({
+      isEmpty: () => false,
+      toDataURL: () => iconUrl,
+    } as never);
+
+    expect(await call(SETTINGS_CH.actionFileIcon, 'C:\\Tools\\tool.exe')).toBe(iconUrl);
+  });
+
+  it('returns a website favicon as a data URL', async () => {
+    const electron = await import('electron');
+    const body = Uint8Array.from([1, 2, 3]);
+    vi.mocked(electron.net.fetch).mockResolvedValueOnce(new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    }) as never);
+
+    expect(await call(SETTINGS_CH.actionUrlIcon, 'https://example.com/docs')).toBe('data:image/png;base64,AQID');
+  });
+
+  it('follows homepage icon links when the root favicon is missing', async () => {
+    const electron = await import('electron');
+    vi.mocked(electron.net.fetch)
+      .mockResolvedValueOnce(new Response('', { status: 404 }) as never)
+      .mockResolvedValueOnce(new Response('<link rel="apple-touch-icon" href="/touch.png">', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }) as never)
+      .mockResolvedValueOnce(new Response(Uint8Array.from([9, 8, 7]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }) as never);
+
+    expect(await call(SETTINGS_CH.actionUrlIcon, 'https://example.com/docs')).toBe('data:image/png;base64,CQgH');
   });
 });
 

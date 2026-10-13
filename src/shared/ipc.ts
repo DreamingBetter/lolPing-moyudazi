@@ -93,6 +93,8 @@ export interface SettingsApi {
   openProjectPage(): Promise<void>;
   pickFile(): Promise<string | null>;
   pickFolder(): Promise<string | null>;
+  getFileIcon(path: string): Promise<string | null>;
+  getUrlIcon(url: string): Promise<string | null>;
   retryHelper(): Promise<void>;
   setCapturing(on: boolean): Promise<void>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */

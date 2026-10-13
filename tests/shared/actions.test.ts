@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ACTION_TEMPLATES, DEFAULT_ACTION_WHEEL, actionIconUrl, normalizeActionSlot, normalizeActionWheel,
+  ACTION_TEMPLATES, DEFAULT_ACTION_WHEEL, actionIconUrl, actionSlotIconUrl, normalizeActionSlot, normalizeActionWheel,
 } from '../../src/shared/actions';
 
 describe('action model', () => {
   it('ships the default 8-slot action wheel', () => {
     expect(DEFAULT_ACTION_WHEEL.map((a) => a.kind)).toEqual([
-      'screenshot', 'muteToggle', 'showDesktop', 'lockScreen',
-      'openBrowser', 'openUrl', 'openApp', 'openFolder',
+      'screenshot', 'lockScreen', 'volumeUp', 'openBrowser',
+      'muteToggle', 'openUrl', 'volumeDown', 'showDesktop',
     ]);
+    expect(DEFAULT_ACTION_WHEEL[5].params).toEqual({ url: 'https://www.baidu.com' });
     expect(new Set(DEFAULT_ACTION_WHEEL.map((a) => a.id)).size).toBe(8);
   });
 
@@ -20,20 +21,46 @@ describe('action model', () => {
   });
 
   it('normalizes a parameterized URL action', () => {
+    const iconUrl = 'data:image/png;base64,aWNvbg==';
     expect(normalizeActionSlot({
       id: 'site',
       kind: 'openUrl',
       label: 'Docs',
       icon: 'web',
-      params: { url: 'https://example.com', path: 'C:/ignored' },
+      params: { url: 'https://example.com', path: 'C:/ignored', iconUrl },
       extra: true,
     }, 2)).toEqual({
       id: 'site',
       kind: 'openUrl',
       label: 'Docs',
       icon: 'web',
-      params: { url: 'https://example.com' },
+      params: { url: 'https://example.com', iconUrl },
     });
+  });
+
+  it('keeps safe generated icons only on website and app actions', () => {
+    const iconUrl = 'data:image/png;base64,aWNvbg==';
+    expect(normalizeActionSlot({
+      id: 'app',
+      kind: 'openApp',
+      label: 'Tool',
+      icon: 'app',
+      params: { path: 'C:\\Tools\\tool.exe', iconUrl },
+    }, 0).params).toEqual({ path: 'C:\\Tools\\tool.exe', iconUrl });
+    expect(normalizeActionSlot({
+      id: 'remote',
+      kind: 'openApp',
+      label: 'Tool',
+      icon: 'app',
+      params: { path: 'C:\\Tools\\tool.exe', iconUrl: 'https://example.com/icon.png' },
+    }, 0).params).toEqual({ path: 'C:\\Tools\\tool.exe' });
+    expect(normalizeActionSlot({
+      id: 'folder',
+      kind: 'openFolder',
+      label: 'Folder',
+      icon: 'folder',
+      params: { path: 'C:\\Docs', iconUrl },
+    }, 0).params).toEqual({ path: 'C:\\Docs' });
   });
 
   it('falls back invalid slots by position and repairs duplicate ids', () => {
@@ -96,7 +123,29 @@ describe('action model', () => {
     expect(new Set(wheel.map((a) => a.id)).size).toBe(8);
   });
 
+  it('migrates the previous default action wheel to the current default', () => {
+    const legacy = [
+      { id: 'action-0-screenshot', kind: 'screenshot', label: 'Screenshot', icon: 'screenshot' },
+      { id: 'action-1-muteToggle', kind: 'muteToggle', label: 'Mute/unmute', icon: 'mute' },
+      { id: 'action-2-showDesktop', kind: 'showDesktop', label: 'Show desktop', icon: 'desktop' },
+      { id: 'action-3-lockScreen', kind: 'lockScreen', label: 'Lock screen', icon: 'lock' },
+      { id: 'action-4-openBrowser', kind: 'openBrowser', label: 'Open browser', icon: 'browser' },
+      { id: 'action-5-openUrl', kind: 'openUrl', label: 'Open website', icon: 'web', params: {} },
+      { id: 'action-6-openApp', kind: 'openApp', label: 'Open app', icon: 'app', params: {} },
+      { id: 'action-7-openFolder', kind: 'openFolder', label: 'Open folder', icon: 'folder', params: {} },
+    ];
+
+    expect(normalizeActionWheel(legacy)).toEqual(DEFAULT_ACTION_WHEEL);
+  });
+
   it('builds overlay icon urls', () => {
     expect(actionIconUrl('screenshot')).toBe('../actions/screenshot.svg');
+    expect(actionSlotIconUrl({
+      id: 'site',
+      kind: 'openUrl',
+      label: 'Docs',
+      icon: 'web',
+      params: { url: 'https://example.com', iconUrl: 'data:image/png;base64,aWNvbg==' },
+    })).toBe('data:image/png;base64,aWNvbg==');
   });
 });
