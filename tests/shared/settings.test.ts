@@ -536,10 +536,14 @@ describe('update settings', () => {
 });
 
 describe('cursor skin settings', () => {
-  it('defaults off and keeps only boolean values', () => {
+  it('defaults to the modern disabled cursor skin and keeps only boolean values', () => {
     expect(normalizeSettings(undefined).cursorSkinEnabled).toBe(false);
+    expect(normalizeSettings(undefined).cursorSkinClassic).toBe(false);
     expect(normalizeSettings({ cursorSkinEnabled: true }).cursorSkinEnabled).toBe(true);
     expect(normalizeSettings({ cursorSkinEnabled: false }).cursorSkinEnabled).toBe(false);
+    expect(normalizeSettings({ cursorSkinClassic: true }).cursorSkinClassic).toBe(true);
+    expect(normalizeSettings({ cursorSkinClassic: false }).cursorSkinClassic).toBe(false);
     for (const raw of ['yes', 1, null, {}]) expect(normalizeSettings({ cursorSkinEnabled: raw }).cursorSkinEnabled).toBe(false);
+    for (const raw of ['yes', 1, null, {}]) expect(normalizeSettings({ cursorSkinClassic: raw }).cursorSkinClassic).toBe(false);
   });
 });

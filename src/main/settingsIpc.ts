@@ -11,7 +11,7 @@ import type { JoinResult, RoomState } from '../shared/room';
 import type { ChatSendResult, RoomChatState } from '../shared/roomChat';
 import { patchClashes, rendererPatch, type Settings } from '../shared/settings';
 import type { UpdateState } from '../shared/update';
-import type { CursorSkinResult } from './cursorSkin';
+import type { CursorSkinResult, CursorSkinVariant } from './cursorSkin';
 import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
 import type { SettingsStore } from './settingsStore';
 
@@ -48,7 +48,7 @@ export interface SettingsIpcDeps {
   platform: Platform;
   /** Windows system cursor skin switcher. Omitted on platforms that cannot change Windows cursors. */
   cursorSkin?: {
-    applySummoner(): Promise<CursorSkinResult>;
+    applySummoner(variant?: CursorSkinVariant): Promise<CursorSkinResult>;
     restoreOriginal(): Promise<CursorSkinResult>;
   };
   /** The update checker. Absent in a development build without LOLPING_UPDATE_TEST_URL: the page then shows no update controls. */
@@ -92,11 +92,17 @@ function hotkeyConflict(next: Hotkey, current: Hotkey, text: Strings, platform: 
 }
 
 async function cursorSkinError(d: SettingsIpcDeps, patch: Partial<Settings>): Promise<string | null> {
-  if (!Object.prototype.hasOwnProperty.call(patch, 'cursorSkinEnabled') || typeof patch.cursorSkinEnabled !== 'boolean') return null;
-  if (patch.cursorSkinEnabled === d.store.get().cursorSkinEnabled) return null;
+  const changesEnabled = Object.prototype.hasOwnProperty.call(patch, 'cursorSkinEnabled') && typeof patch.cursorSkinEnabled === 'boolean';
+  const changesClassic = Object.prototype.hasOwnProperty.call(patch, 'cursorSkinClassic') && typeof patch.cursorSkinClassic === 'boolean';
+  if (!changesEnabled && !changesClassic) return null;
+  const current = d.store.get();
+  const nextEnabled = changesEnabled ? patch.cursorSkinEnabled === true : current.cursorSkinEnabled;
+  const nextClassic = changesClassic ? patch.cursorSkinClassic === true : current.cursorSkinClassic;
+  if (nextEnabled === current.cursorSkinEnabled && nextClassic === current.cursorSkinClassic) return null;
+  if (!nextEnabled && !changesEnabled) return null;
   if (!d.cursorSkin) return d.text().cursorSkinFailed;
   try {
-    const result = patch.cursorSkinEnabled ? await d.cursorSkin.applySummoner() : await d.cursorSkin.restoreOriginal();
+    const result = nextEnabled ? await d.cursorSkin.applySummoner(nextClassic ? 'classic' : 'modern') : await d.cursorSkin.restoreOriginal();
     return result.ok ? null : result.error || d.text().cursorSkinFailed;
   } catch (e) {
     return e instanceof Error ? e.message : d.text().cursorSkinFailed;

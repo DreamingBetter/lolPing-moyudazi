@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import type { Platform } from '../shared/platform';
 
 export type CursorSkinResult = { ok: true } | { ok: false; error: string };
+export type CursorSkinVariant = 'modern' | 'classic';
 
 export const CURSOR_ROLES = [
   'Arrow',
@@ -50,6 +51,26 @@ export const SUMMONER_CURSOR_FILES: Record<CursorRole, string> = {
   Person: 'person.cur',
 };
 
+export const SUMMONER_CLASSIC_CURSOR_FILES: Record<CursorRole, string> = {
+  Arrow: 'normal.cur',
+  Help: 'help.cur',
+  AppStarting: 'working.ani',
+  Wait: 'busy.ani',
+  Crosshair: 'precision.cur',
+  IBeam: 'text.cur',
+  NWPen: 'handwriting.cur',
+  No: 'unavailable.cur',
+  SizeNS: 'vertical.cur',
+  SizeWE: 'horizontal.cur',
+  SizeNWSE: 'diagonal1.cur',
+  SizeNESW: 'diagonal2.cur',
+  SizeAll: 'move.cur',
+  UpArrow: 'alternate.cur',
+  Hand: 'link.cur',
+  Pin: '',
+  Person: '',
+};
+
 const aero = (file: string, systemRoot: string): string => join(systemRoot, 'cursors', file);
 
 export function defaultAeroCursorValues(systemRoot = 'C:\\Windows'): CursorValues {
@@ -79,7 +100,9 @@ export const DEFAULT_AERO_CURSOR_VALUES = defaultAeroCursorValues();
 export interface CursorSkinDeps {
   platform: Platform;
   sourceDir: string;
+  classicSourceDir: string;
   installDir: string;
+  classicInstallDir: string;
   backupFile: string;
   systemRoot?: string;
   exists(path: string): boolean;
@@ -94,7 +117,9 @@ export interface CursorSkinDeps {
 export interface CursorSkinPaths {
   platform: Platform;
   sourceDir: string;
+  classicSourceDir: string;
   installDir: string;
+  classicInstallDir: string;
   backupFile: string;
 }
 
@@ -143,12 +168,13 @@ function backupValues(raw: unknown): CursorValues {
 export class CursorSkinService {
   constructor(private readonly deps: CursorSkinDeps) {}
 
-  async applySummoner(): Promise<CursorSkinResult> {
+  async applySummoner(variant: CursorSkinVariant = 'modern'): Promise<CursorSkinResult> {
     if (this.deps.platform !== 'win') return { ok: false, error: 'Cursor skins are only supported on Windows.' };
     try {
-      this.verifySourceFiles();
+      const scheme = this.scheme(variant);
+      this.verifySourceFiles(scheme.files, scheme.sourceDir);
       await this.backupCurrentValuesOnce();
-      const values = await this.installSummonerValues();
+      const values = await this.installSummonerValues(scheme.files, scheme.sourceDir, scheme.installDir);
       await this.writeAndReload(values);
       return { ok: true };
     } catch (e) {
@@ -170,9 +196,15 @@ export class CursorSkinService {
     }
   }
 
-  private verifySourceFiles(): void {
-    for (const file of new Set(Object.values(SUMMONER_CURSOR_FILES))) {
-      const path = join(this.deps.sourceDir, file);
+  private scheme(variant: CursorSkinVariant): { files: Record<CursorRole, string>; sourceDir: string; installDir: string } {
+    return variant === 'classic'
+      ? { files: SUMMONER_CLASSIC_CURSOR_FILES, sourceDir: this.deps.classicSourceDir, installDir: this.deps.classicInstallDir }
+      : { files: SUMMONER_CURSOR_FILES, sourceDir: this.deps.sourceDir, installDir: this.deps.installDir };
+  }
+
+  private verifySourceFiles(files: Record<CursorRole, string>, sourceDir: string): void {
+    for (const file of new Set(Object.values(files).filter(Boolean))) {
+      const path = join(sourceDir, file);
       if (!this.deps.exists(path)) throw new Error(`Missing cursor asset: ${file}`);
     }
   }
@@ -202,13 +234,13 @@ export class CursorSkinService {
     return normalizeCursorValues(JSON.parse(stdout.trim() || '{}'));
   }
 
-  private async installSummonerValues(): Promise<CursorValues> {
-    await this.deps.mkdir(this.deps.installDir);
-    for (const file of new Set(Object.values(SUMMONER_CURSOR_FILES))) {
-      await this.deps.copyFile(join(this.deps.sourceDir, file), join(this.deps.installDir, file));
+  private async installSummonerValues(files: Record<CursorRole, string>, sourceDir: string, installDir: string): Promise<CursorValues> {
+    await this.deps.mkdir(installDir);
+    for (const file of new Set(Object.values(files).filter(Boolean))) {
+      await this.deps.copyFile(join(sourceDir, file), join(installDir, file));
     }
     const out = {} as CursorValues;
-    for (const role of CURSOR_ROLES) out[role] = join(this.deps.installDir, SUMMONER_CURSOR_FILES[role]);
+    for (const role of CURSOR_ROLES) out[role] = files[role] ? join(installDir, files[role]) : '';
     return out;
   }
 

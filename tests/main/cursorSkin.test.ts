@@ -1,11 +1,13 @@
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  CursorSkinService, DEFAULT_AERO_CURSOR_VALUES, SUMMONER_CURSOR_FILES, type CursorSkinDeps,
+  CursorSkinService, DEFAULT_AERO_CURSOR_VALUES, SUMMONER_CLASSIC_CURSOR_FILES, SUMMONER_CURSOR_FILES, type CursorSkinDeps,
 } from '../../src/main/cursorSkin';
 
 const sourceDir = 'C:\\bundle\\cursors\\summoner';
+const classicSourceDir = 'C:\\bundle\\cursors\\summoner-classic';
 const installDir = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing\\cursors\\summoner';
+const classicInstallDir = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing\\cursors\\summoner-classic';
 const backupFile = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing\\cursor-backup.json';
 
 const currentValues = {
@@ -37,12 +39,17 @@ const scripts = () => vi.mocked(deps.execFile).mock.calls.map(([, args]) => args
 const registryScript = () => scripts().find((s) => s.includes('Set-ItemProperty')) ?? '';
 
 beforeEach(() => {
-  existing = new Set(Object.values(SUMMONER_CURSOR_FILES).map((file) => join(sourceDir, file)));
+  existing = new Set([
+    ...Object.values(SUMMONER_CURSOR_FILES).map((file) => join(sourceDir, file)),
+    ...Object.values(SUMMONER_CLASSIC_CURSOR_FILES).filter(Boolean).map((file) => join(classicSourceDir, file)),
+  ]);
   files = new Map();
   deps = {
     platform: 'win',
     sourceDir,
+    classicSourceDir,
     installDir,
+    classicInstallDir,
     backupFile,
     systemRoot: 'C:\\Windows',
     exists: vi.fn((path) => existing.has(path)),
@@ -79,6 +86,17 @@ describe('CursorSkinService', () => {
     expect(registryScript()).toContain(join(installDir, 'normal.cur'));
     expect(registryScript()).toContain('SystemParametersInfo(0x0057, 0, [IntPtr]::Zero, 0x0002)');
     expect(registryScript()).not.toContain('SystemParametersInfo(0x0057, 0, [IntPtr]::Zero, 0x0003)');
+  });
+
+  it('installs and writes the classic Summoner cursor scheme when requested', async () => {
+    await expect(service().applySummoner('classic')).resolves.toEqual({ ok: true });
+
+    expect(deps.copyFile).toHaveBeenCalledWith(join(classicSourceDir, 'normal.cur'), join(classicInstallDir, 'normal.cur'));
+    expect(deps.copyFile).toHaveBeenCalledWith(join(classicSourceDir, 'precision.cur'), join(classicInstallDir, 'precision.cur'));
+    expect(registryScript()).toContain(join(classicInstallDir, 'normal.cur'));
+    expect(registryScript()).toContain(join(classicInstallDir, 'precision.cur'));
+    expect(registryScript()).not.toContain(join(classicInstallDir, 'loc.cur'));
+    expect(registryScript()).not.toContain(join(classicInstallDir, 'person.cur'));
   });
 
   it('does not overwrite an existing original cursor backup when applying again', async () => {

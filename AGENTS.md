@@ -48,8 +48,9 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Do not add a separate entertainment wheel for now; the existing ping and emote wheels cover expressive/fun use cases.
 - Prefer a practical first milestone: one configurable action wheel with safe, obvious actions before adding advanced automation.
 - Add a Windows system-level cursor skin feature after design alignment. The user wants a 光标精灵-style cursor pack switcher rather than an overlay-only fake cursor.
-- The cursor skin feature should not support user-imported custom packs. It only exposes one built-in Summoner cursor pack from the user-provided assets.
-- The settings UI for cursor skins should be a single switch: on applies the bundled Summoner cursor scheme; off restores the user's original Windows cursor scheme.
+- The cursor skin feature should not support user-imported custom packs. It exposes only the bundled Summoner cursor packs from user-provided assets.
+- The settings UI for cursor skins has a main switch: on applies the bundled Summoner cursor scheme; off restores the user's original Windows cursor scheme.
+- The default Summoner cursor pack is the newer `assets/cursors/summoner` pack. The optional old League cursor pack lives in `assets/cursors/summoner-classic`, is selected by the `cursorSkinClassic` setting, and only uses the bundled ASCII-named `.cur` / `.ani` files extracted from `鼠标指针.zip`'s `yxlm` folder.
 - System cursor skins should use Windows `.cur` / `.ani` files and a full cursor-role mapping. Prefer the same durable mechanism as Windows Mouse Properties/cursor pack tools: copy/install the files to a stable user-data location, write the per-user cursor scheme under `HKCU\Control Panel\Cursors`, then ask Windows to reload cursors with `SystemParametersInfo(SPI_SETCURSORS)`.
 - Avoid using `SetSystemCursor` as the primary implementation for persistent skins because it replaces in-memory system cursors directly and is harder to restore safely.
 - Before applying any cursor skin, back up the user's current cursor values and provide an obvious restore action. Cursor changes are global to the current Windows user, so failures must leave a clear recovery path.

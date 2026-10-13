@@ -49,6 +49,8 @@ export interface Settings {
   launchAtStartup: boolean;
   /** Windows only: apply the bundled Summoner system cursor scheme. */
   cursorSkinEnabled: boolean;
+  /** Windows only: use the old League cursor files instead of the default modern Summoner pack. */
+  cursorSkinClassic: boolean;
   language: LanguagePref;
   /** Shown under your pings on other people's screens. */
   displayName: string;
@@ -113,6 +115,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tickSound: true,
   launchAtStartup: false,
   cursorSkinEnabled: false,
+  cursorSkinClassic: false,
   language: 'auto',
   displayName: 'Player',
   tagColor: 0,
@@ -151,7 +154,7 @@ export const LIMITS = {
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'cursorSkinEnabled'
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'cursorSkinEnabled' | 'cursorSkinClassic'
   | 'allowInternet' | 'rejoinRoom' | 'roomMuted' | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck' | 'chatDanmakuEnabled';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -290,6 +293,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     tickSound: bool(r.tickSound, 'tickSound'),
     launchAtStartup: bool(r.launchAtStartup, 'launchAtStartup'),
     cursorSkinEnabled: bool(r.cursorSkinEnabled, 'cursorSkinEnabled'),
+    cursorSkinClassic: bool(r.cursorSkinClassic, 'cursorSkinClassic'),
     language: (LANGUAGE_PREFS as readonly unknown[]).includes(r.language) ? (r.language as LanguagePref) : DEFAULT_SETTINGS.language,
     displayName: typeof r.displayName === 'string' ? sanitizeName(r.displayName, fallbackName) : fallbackName,
     tagColor: isTagColor(r.tagColor) ? r.tagColor : isTagColor(identity.color) ? identity.color : 0,

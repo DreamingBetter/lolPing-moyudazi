@@ -92,7 +92,9 @@ function start(): void {
   const cursorSkin = IS_MAC ? undefined : createCursorSkinService({
     platform: PLATFORM,
     sourceDir: assetPath('cursors', 'summoner'),
+    classicSourceDir: assetPath('cursors', 'summoner-classic'),
     installDir: join(settingsDir(), 'cursors', 'summoner'),
+    classicInstallDir: join(settingsDir(), 'cursors', 'summoner-classic'),
     backupFile: join(settingsDir(), 'cursor-backup.json'),
   });
   // An imported emote whose still is gone is dropped; normalising the shorter list repairs the wheel slots that used it.

@@ -109,9 +109,39 @@ describe('settings IPC', () => {
     const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: true });
 
     expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: true } });
-    expect(cursorSkin.applySummoner).toHaveBeenCalledTimes(1);
+    expect(cursorSkin.applySummoner).toHaveBeenCalledWith('modern');
     expect(cursorSkin.restoreOriginal).not.toHaveBeenCalled();
     expect(store.get().cursorSkinEnabled).toBe(true);
+  });
+
+  it('applies the classic cursor skin when enabling with the classic option saved', async () => {
+    store.update({ cursorSkinClassic: true });
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: true });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: true, cursorSkinClassic: true } });
+    expect(cursorSkin.applySummoner).toHaveBeenCalledWith('classic');
+    expect(cursorSkin.restoreOriginal).not.toHaveBeenCalled();
+  });
+
+  it('reapplies the cursor skin when switching between modern and classic while enabled', async () => {
+    store.update({ cursorSkinEnabled: true });
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinClassic: true });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: true, cursorSkinClassic: true } });
+    expect(cursorSkin.applySummoner).toHaveBeenCalledWith('classic');
+    expect(cursorSkin.restoreOriginal).not.toHaveBeenCalled();
   });
 
   it('restores the cursor skin before saving the disabled switch', async () => {

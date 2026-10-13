@@ -232,19 +232,28 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
           checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
         {!MAC ? (
-          <SwitchRow icon={<Cursor24Regular />} title={<FeatureLabel isNew>{t.cursorSkin}</FeatureLabel>}
-            description={(
-              <>
-                {t.cursorSkinDesc}
-                {cursorSkinError ? <span className="desc">{cursorSkinError}</span> : null}
-              </>
-            )}
-            checked={s.cursorSkinEnabled}
-            onChange={(v) => {
-              void update({ cursorSkinEnabled: v }).then((result) => {
-                setCursorSkinError(result.ok ? null : result.error);
-              });
-            }} />
+          <>
+            <SwitchRow icon={<Cursor24Regular />} title={<FeatureLabel isNew>{t.cursorSkin}</FeatureLabel>}
+              description={(
+                <>
+                  {t.cursorSkinDesc}
+                  {cursorSkinError ? <span className="desc">{cursorSkinError}</span> : null}
+                </>
+              )}
+              checked={s.cursorSkinEnabled}
+              onChange={(v) => {
+                void update({ cursorSkinEnabled: v }).then((result) => {
+                  setCursorSkinError(result.ok ? null : result.error);
+                });
+              }} />
+            <SwitchRow icon={<Cursor24Regular />} title={t.cursorSkinClassic} description={t.cursorSkinClassicDesc}
+              checked={s.cursorSkinClassic}
+              onChange={(v) => {
+                void update({ cursorSkinClassic: v }).then((result) => {
+                  setCursorSkinError(result.ok ? null : result.error);
+                });
+              }} />
+          </>
         ) : null}
         <SettingRow icon={<LocalLanguage24Regular />} title={t.language} description={t.languageDesc}>
           <Dropdown
