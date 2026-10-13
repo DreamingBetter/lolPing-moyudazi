@@ -25,6 +25,20 @@ describe('action editor items', () => {
     expect(customItem.name).toBe('Work capture');
   });
 
+  it('uses a generated slot icon before the built-in action icon', () => {
+    const iconUrl = 'data:image/png;base64,aWNvbg==';
+    const t = strings('en');
+    const [item] = actionWheelItems([{
+      id: 'docs',
+      kind: 'openUrl',
+      label: 'Docs',
+      icon: 'web',
+      params: { url: 'https://example.com', iconUrl },
+    }], t);
+
+    expect(item.icon).toBe(iconUrl);
+  });
+
   it('shows configured volume actions by their actual volume delta', () => {
     const t = strings('zh-CN');
     const items = actionWheelItems([

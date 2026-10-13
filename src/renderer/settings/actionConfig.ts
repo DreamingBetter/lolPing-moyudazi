@@ -1,9 +1,11 @@
 import {
+  actionCustomIconUrl,
   actionTemplate,
   normalizeVolumeStep,
   type ActionKind,
   type ActionSlot,
 } from '../../shared/actions';
+import type { Strings } from '../../shared/i18n';
 
 export type ActionConfigIssue = 'url' | 'path' | 'volumeStep';
 
@@ -30,8 +32,10 @@ const isWebUrl = (raw: string): boolean => {
 };
 
 export function actionParams(kind: ActionKind, params: ActionSlot['params'] = {}): ActionSlot['params'] | undefined {
-  if (kind === 'openUrl') return { url: params.url?.trim() ?? '' };
-  if (kind === 'openApp' || kind === 'openFile' || kind === 'openFolder') return { path: params.path?.trim() ?? '' };
+  const iconUrl = actionCustomIconUrl(params.iconUrl);
+  if (kind === 'openUrl') return { url: params.url?.trim() ?? '', ...(iconUrl ? { iconUrl } : {}) };
+  if (kind === 'openApp') return { path: params.path?.trim() ?? '', ...(iconUrl ? { iconUrl } : {}) };
+  if (kind === 'openFile' || kind === 'openFolder') return { path: params.path?.trim() ?? '' };
   if (kind === 'volumeUp' || kind === 'volumeDown') return { volumeStep: normalizeVolumeStep(params.volumeStep) };
   return undefined;
 }
@@ -60,6 +64,11 @@ export function cloneActionTemplateForSlot(kind: ActionKind, index: number, para
     id: `action-${index}-${kind}-${Date.now().toString(36)}-${slotSeed}`,
     params: actionParams(kind, params ?? template.params),
   };
+}
+
+export function localizeActionConfigLabel(slot: ActionSlot, t: Strings): ActionSlot {
+  const template = actionTemplate(slot.kind);
+  return slot.label === template.label ? { ...slot, label: t.actionNames[slot.kind] } : slot;
 }
 
 export function withActionConfig(slot: ActionSlot, patch: { label?: string; params?: ActionSlot['params'] }): ActionSlot {

@@ -335,9 +335,10 @@ describe('action wheel settings', () => {
     const s = normalizeSettings(undefined);
     expect(s.actionTrigger).toBe('shift');
     expect(s.actionWheel.map((a) => a.kind)).toEqual([
-      'screenshot', 'muteToggle', 'showDesktop', 'lockScreen',
-      'openBrowser', 'openUrl', 'openApp', 'openFolder',
+      'screenshot', 'lockScreen', 'volumeUp', 'openBrowser',
+      'muteToggle', 'openUrl', 'volumeDown', 'showDesktop',
     ]);
+    expect(s.actionWheel[5].params).toEqual({ url: 'https://www.baidu.com' });
   });
 
   it('turns off an action trigger that clashes with ping or emote', () => {
@@ -465,5 +466,14 @@ describe('update settings', () => {
     const s = mergeSettings(DEFAULT_SETTINGS, { updateNotifiedVersion: '0.6.0', autoUpdateCheck: false });
     expect([s.autoUpdateCheck, s.updateNotifiedVersion]).toEqual([false, '0.6.0']);
     expect(mergeSettings(s, { updateNotifiedVersion: 'junk' }).updateNotifiedVersion).toBeNull();
+  });
+});
+
+describe('cursor skin settings', () => {
+  it('defaults off and keeps only boolean values', () => {
+    expect(normalizeSettings(undefined).cursorSkinEnabled).toBe(false);
+    expect(normalizeSettings({ cursorSkinEnabled: true }).cursorSkinEnabled).toBe(true);
+    expect(normalizeSettings({ cursorSkinEnabled: false }).cursorSkinEnabled).toBe(false);
+    for (const raw of ['yes', 1, null, {}]) expect(normalizeSettings({ cursorSkinEnabled: raw }).cursorSkinEnabled).toBe(false);
   });
 });

@@ -8,6 +8,18 @@ import { DEFAULT_SETTINGS, type Settings } from '../../src/shared/settings';
 const tempDir = () => mkdtempSync(join(tmpdir(), 'lolping-'));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+async function waitForVolume(file: string, expected: number): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (existsSync(file)) {
+      const volume = JSON.parse(readFileSync(file, 'utf8')).volume;
+      if (volume === expected) return;
+    }
+    await sleep(20);
+  }
+  expect(JSON.parse(readFileSync(file, 'utf8')).volume).toBe(expected);
+}
+
 describe('SettingsStore', () => {
   it('uses defaults when there is no file', () => {
     const store = new SettingsStore(tempDir());
@@ -157,8 +169,7 @@ describe('SettingsStore', () => {
     // Well inside the debounce window: an immediate (or ignored-debounce) write would have landed by now.
     await sleep(25);
     expect(existsSync(join(dir, 'settings.json'))).toBe(false);
-    await sleep(150);
-    expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')).volume).toBe(20);
+    await waitForVolume(join(dir, 'settings.json'), 20);
   });
 
   it('still falls back to defaults when the corrupt file cannot be backed up', () => {

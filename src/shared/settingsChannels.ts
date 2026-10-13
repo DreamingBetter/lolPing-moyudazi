@@ -15,6 +15,8 @@ export const SETTINGS_CH = {
   openProject: 'app:openProjectPage',
   pickFile: 'dialog:pickFile',
   pickFolder: 'dialog:pickFolder',
+  actionFileIcon: 'action:fileIcon',
+  actionUrlIcon: 'action:urlIcon',
   retryHelper: 'app:retryHelper',
   capture: 'app:capture',
   openAccessibility: 'app:openAccessibility',

@@ -4,7 +4,7 @@ import {
   allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteIconUrl, emoteSoundUrl, isBundledEmote,
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
-import { actionIconUrl } from '../../shared/actions';
+import { actionIconUrl, actionSlotIconUrl } from '../../shared/actions';
 import { resolveLang, strings } from '../../shared/i18n';
 import {
   DEFAULT_CLICK_PING, TICK_SOUND, allSoundNames, allTextureNames, pingById, pingsFor, soundUrl, textureUrl, type PingDef,
@@ -52,7 +52,7 @@ const actionItem = (slot: OverlaySettings['actionWheel'][number]): WheelItem => 
   const t = text();
   return {
     key: slot.id,
-    icon: actionIconUrl(slot.icon),
+    icon: actionSlotIconUrl(slot),
     label: actionDisplayName(slot, t),
     description: actionDescription(slot, t),
   };
