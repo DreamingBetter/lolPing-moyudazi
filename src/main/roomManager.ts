@@ -4,7 +4,7 @@ import type { PingId } from '../shared/pings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
 import {
   CHAT_HISTORY_LIMIT, CHAT_INCOMING_BURST, CHAT_INCOMING_RATE, CHAT_OUTGOING_BURST, CHAT_OUTGOING_RATE,
-  type ChatHistoryItem, type ChatSendResult, type RoomChatMessage, type RoomChatState,
+  type ChatHistoryItem, type ChatSendResult, type LiveChatMessage, type RoomChatMessage, type RoomChatState,
 } from '../shared/roomChat';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
@@ -333,6 +333,7 @@ export class RoomManager extends EventEmitter {
     const sent = this.sendShared({ t: 'chat', id, text: clean }, { respectPause: false, useRelayCap: false });
     message.status = sent ? 'sent' : 'failed';
     this.emitChatState();
+    if (sent) this.emitChatMessage(message);
     return sent ? { ok: true, id } : { ok: false, error: 'failed' };
   }
 
@@ -348,6 +349,7 @@ export class RoomManager extends EventEmitter {
     const sent = this.sendShared({ t: 'chat', id: message.id, text: message.text }, { respectPause: false, useRelayCap: false });
     message.status = sent ? 'sent' : 'failed';
     this.emitChatState();
+    if (sent) this.emitChatMessage(message);
     return sent ? { ok: true, id: message.id } : { ok: false, error: 'failed' };
   }
 
@@ -498,9 +500,11 @@ export class RoomManager extends EventEmitter {
     if (this.chatSeen.has(id)) return;
     if (!this.chatIncoming.allow(m.peer, CHAT_INCOMING_RATE, CHAT_INCOMING_BURST)) return;
     this.chatSeen.add(id);
-    this.chatMessages.push({ id, peer: m.peer, name: m.name, color: m.color, ts, text, self: false });
+    const message: RoomChatMessage = { id, peer: m.peer, name: m.name, color: m.color, ts, text, self: false };
+    this.chatMessages.push(message);
     this.sortAndTrimChat();
     this.emitChatState();
+    this.emitChatMessage(message);
   }
 
   private requestChatHistory(): void {
@@ -804,5 +808,10 @@ export class RoomManager extends EventEmitter {
     if (json === this.lastChatState) return;
     this.lastChatState = json;
     this.emit('chatState', s);
+  }
+
+  private emitChatMessage(message: RoomChatMessage): void {
+    const { id, peer, name, color, ts, text, self } = message;
+    this.emit('chatMessage', { id, peer, name, color, ts, text, self } satisfies LiveChatMessage);
   }
 }

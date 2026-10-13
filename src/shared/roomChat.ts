@@ -20,6 +20,16 @@ export interface RoomChatMessage {
   status?: ChatSendStatus;
 }
 
+export interface LiveChatMessage {
+  id: string;
+  peer: string;
+  name: string;
+  color: number;
+  ts: number;
+  text: string;
+  self: boolean;
+}
+
 export interface RoomChatState {
   phase: 'idle' | 'joining' | 'active';
   code: string | null;

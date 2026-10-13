@@ -1,5 +1,5 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
-#pings, #emotes, #toasts { position: fixed; inset: 0; pointer-events: none; }
+#pings, #emotes, #toasts, #chatDanmaku { position: fixed; inset: 0; pointer-events: none; }
 
 /* ---------- wheel ---------- */
 #wheel, #emoteWheel {
@@ -92,6 +92,26 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 @keyframes emoteIn { 0% { transform: scale(0) } 60% { transform: scale(1.15) } 100% { transform: scale(1) } }
 @keyframes emoteBob { 0%, 100% { translate: 0 0 } 25% { translate: 0 -4px } 75% { translate: 0 4px } }
 @keyframes emoteOut { from { transform: scale(1); opacity: 1 } to { transform: scale(.85); opacity: 0 } }
+
+/* ---------- chat danmaku ---------- */
+#chatDanmaku {
+  overflow: hidden; height: var(--chat-danmaku-area-height, 50vh);
+  contain: layout paint; opacity: var(--chat-danmaku-opacity, .85);
+}
+.chatDanmakuItem {
+  position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: .45em;
+  max-width: none; white-space: nowrap; will-change: transform; pointer-events: none;
+  padding: 3px 10px 4px; border-radius: 4px; background: rgba(6, 10, 16, .52);
+  color: rgba(255, 255, 255, .94); text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+  font: 700 var(--danmaku-size, 24px)/1.35 "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif;
+  animation: chatDanmakuFly var(--danmaku-duration, 8s) linear forwards;
+}
+.chatDanmakuName { color: var(--tag-color, #8ab4ff); }
+.chatDanmakuText { color: inherit; font-weight: 650; }
+@keyframes chatDanmakuFly {
+  from { transform: translate3d(var(--from-x, 100vw), var(--track-y, 0), 0); }
+  to { transform: translate3d(var(--to-x, -100%), var(--track-y, 0), 0); }
+}
 
 /* ---------- toast ---------- */
 .toast {

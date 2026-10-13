@@ -199,7 +199,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
 
         <div className="section" id="chat">{t.navChat}</div>
-        <ChatSection onOpenRoom={() => showSection('room')} />
+        <ChatSection settings={s} update={update} onOpenRoom={() => showSection('room')} />
 
         <div className="section" id="room">{t.navRoom}</div>
         <RoomSection settings={s} update={update} onOpenChat={() => showSection('chat')} />

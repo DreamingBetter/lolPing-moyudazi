@@ -9,6 +9,7 @@ import {
 import type { PingTag } from '../../shared/ipc';
 import type { WheelKind } from '../../shared/protocol';
 import { DEFAULT_SETTINGS, overlaySettings, type OverlaySettings } from '../../shared/settings';
+import { ChatDanmakuStage } from './chatDanmaku';
 import { EmoteStage } from './emoteFx';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
@@ -26,9 +27,13 @@ pingSvg.after(emoteSvg);
 const emoteLayer = document.createElement('div');
 emoteLayer.id = 'emotes';
 pingLayer.after(emoteLayer);
+const chatLayer = document.createElement('div');
+chatLayer.id = 'chatDanmaku';
+emoteLayer.after(chatLayer);
 
 const sounds = new SoundBank();
 const stage = new EmoteStage(emoteLayer);
+const chatStage = new ChatDanmakuStage(chatLayer);
 let settings: OverlaySettings = overlaySettings(DEFAULT_SETTINGS);
 const [fallbackPing] = pingsFor([DEFAULT_CLICK_PING]);
 const volume = (): number => (settings.muted ? 0 : settings.volume / 100);
@@ -61,6 +66,7 @@ function applySettings(s: OverlaySettings): void {
   settings = s;
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
   emoteWheel.setItems(s.emoteWheel.map(emoteItem));
+  chatStage.applySettings(s);
 }
 applySettings(settings);
 
@@ -99,6 +105,7 @@ window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x,
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
+window.overlay.on('chat:spawn', (m) => chatStage.spawn(m));
 
 /** Resolves with `label` when the image at `url` doesn't load. */
 const probe = (url: string, label: string): Promise<string | null> =>

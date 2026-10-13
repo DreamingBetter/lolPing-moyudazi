@@ -264,6 +264,7 @@ function start(): void {
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
   room.on('state', pushRoom);
   room.on('chatState', pushChat);
+  room.on('chatMessage', (m) => overlays.spawnChatDanmaku(m));
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
   overlays.on('shared', (p: SharedPing) => {

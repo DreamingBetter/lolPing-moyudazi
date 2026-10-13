@@ -18,6 +18,10 @@ export type TriggerKey = NamedTrigger | { vk: number };
 /** The emote key is a trigger key, or 'off': then the emote wheel is off and can't be opened (nor can emote click). */
 export type EmoteTriggerKey = TriggerKey | 'off';
 export const NAMED_TRIGGERS: readonly NamedTrigger[] = ['alt', 'ctrl', 'shift', 'win', 'capslock', 'mouse4', 'mouse5'];
+export const CHAT_DANMAKU_AREAS = ['quarter', 'half', 'threeQuarter', 'full'] as const;
+export type ChatDanmakuArea = typeof CHAT_DANMAKU_AREAS[number];
+export const CHAT_DANMAKU_SPEEDS = ['slow', 'normal', 'fast'] as const;
+export type ChatDanmakuSpeed = typeof CHAT_DANMAKU_SPEEDS[number];
 
 /** Keyboard triggers offered on each platform. macOS can't reliably stop Caps Lock from toggling, so it isn't offered. */
 export const keyboardTriggers = (platform: Platform): NamedTrigger[] =>
@@ -67,6 +71,11 @@ export interface Settings {
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
   updateNotifiedVersion: string | null;
+  chatDanmakuEnabled: boolean;
+  chatDanmakuArea: ChatDanmakuArea;
+  chatDanmakuSpeed: ChatDanmakuSpeed;
+  chatDanmakuSizePx: number;
+  chatDanmakuOpacity: number;
 }
 
 /** Per-machine defaults for the room profile: the OS username and a random tag colour. */
@@ -107,6 +116,11 @@ export const DEFAULT_SETTINGS: Settings = {
   customEmotes: [],
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
+  chatDanmakuEnabled: true,
+  chatDanmakuArea: 'half',
+  chatDanmakuSpeed: 'normal',
+  chatDanmakuSizePx: 24,
+  chatDanmakuOpacity: 85,
 };
 
 export const LIMITS = {
@@ -116,11 +130,13 @@ export const LIMITS = {
   volume: { min: 0, max: 100, step: 1 },
   incomingPingLimit: { min: 0, max: 20, step: 1 },
   emoteSizePx: { min: 80, max: 300, step: 1 },
+  chatDanmakuSizePx: { min: 16, max: 36, step: 1 },
+  chatDanmakuOpacity: { min: 40, max: 100, step: 1 },
 } as const;
 
 type NumKey = keyof typeof LIMITS;
 type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
-  | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck';
+  | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck' | 'chatDanmakuEnabled';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -133,6 +149,8 @@ function num(raw: unknown, key: NumKey): number {
 }
 
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
+const enumValue = <T extends string>(raw: unknown, values: readonly T[], fallback: T): T =>
+  (typeof raw === 'string' && (values as readonly string[]).includes(raw)) ? (raw as T) : fallback;
 
 function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): TriggerKey {
   if (platform === 'mac' && raw === 'capslock') return fallback;
@@ -244,6 +262,11 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     customEmotes: custom,
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
+    chatDanmakuEnabled: bool(r.chatDanmakuEnabled, 'chatDanmakuEnabled'),
+    chatDanmakuArea: enumValue(r.chatDanmakuArea, CHAT_DANMAKU_AREAS, DEFAULT_SETTINGS.chatDanmakuArea),
+    chatDanmakuSpeed: enumValue(r.chatDanmakuSpeed, CHAT_DANMAKU_SPEEDS, DEFAULT_SETTINGS.chatDanmakuSpeed),
+    chatDanmakuSizePx: num(r.chatDanmakuSizePx, 'chatDanmakuSizePx'),
+    chatDanmakuOpacity: num(r.chatDanmakuOpacity, 'chatDanmakuOpacity'),
   };
 }
 
@@ -278,6 +301,7 @@ export type OverlaySettings = Pick<
   Settings,
   'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
+  | 'chatDanmakuEnabled' | 'chatDanmakuArea' | 'chatDanmakuSpeed' | 'chatDanmakuSizePx' | 'chatDanmakuOpacity'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
@@ -285,4 +309,6 @@ export const overlaySettings = (s: Settings): OverlaySettings => ({
   wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),
+  chatDanmakuEnabled: s.chatDanmakuEnabled, chatDanmakuArea: s.chatDanmakuArea, chatDanmakuSpeed: s.chatDanmakuSpeed,
+  chatDanmakuSizePx: s.chatDanmakuSizePx, chatDanmakuOpacity: s.chatDanmakuOpacity,
 });
