@@ -65,6 +65,9 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Keep settings normalized and versioned in shared code; validate anything user-editable.
 - Keep global input capture conservative so normal desktop interactions are not hijacked unexpectedly.
 - Add focused tests for settings normalization, wheel/action selection, and main-process action execution.
+- Default ongoing development should happen in one long-lived integration worktree and branch instead of creating a fresh branch/worktree for every small task. Use `.worktrees/integration-action-room` on `integration/action-room` unless the user asks otherwise.
+- Multiple Codex sessions may work on that same branch for this solo project, but each session must run `git status --short --branch` before editing, avoid concurrently editing the same files, preserve dirty changes it did not make, and commit completed slices frequently.
+- Create a separate branch/worktree only for risky experiments, release isolation, or work that is likely to conflict heavily. Delete stale worktrees/branches after confirming their changes are merged or intentionally abandoned.
 - After each development round, run `npm run dist` so the user can test the packaged result directly. Each round should refresh both `release/lolPing-Setup-0.5.0.exe` and `release/win-unpacked/lolPing.exe`.
 - For quick local investigation, `npm run dev` is still useful, but it does not replace the required final packaging step for a completed development round.
 - `npm run dist` builds the Windows installer. The script uses `tools/build-win.mjs`, which points electron-builder at the already-installed `node_modules/electron/dist` and defaults `ELECTRON_BUILDER_BINARIES_MIRROR` to the npmmirror electron-builder-binaries mirror when no mirror is already configured. This avoids two common local Windows issues: hanging while unpacking Electron from the default cache and timing out while downloading NSIS from GitHub.
