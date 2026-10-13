@@ -56,6 +56,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - The Summoner cursor switch copies bundled cursor files into `%APPDATA%\lolPing\cursors\summoner` before writing registry values. Keep registry paths pointed at this stable user-data copy rather than the install/build output.
 - If applying Summoner fails after a backup exists, attempt to write the backup values back immediately, but keep the backup file so the user can still turn the switch off later.
 - After writing `HKCU\Control Panel\Cursors`, refresh with `SystemParametersInfo(SPI_SETCURSORS, 0, NULL, SPIF_SENDCHANGE)`, i.e. `fWinIni = 0x0002`. Do not pass `0x0003`; including `SPIF_UPDATEINIFILE` made `SPI_SETCURSORS` return false on the user's Windows build.
+- Mark newly added settings features with a small red text badge: `新` in Chinese and `NEW` in English. This should usually be a compact badge beside the feature title rather than an extra icon, so it does not compete with the feature's own navigation icon.
 
 ## Development Habits
 

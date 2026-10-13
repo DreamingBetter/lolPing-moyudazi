@@ -35,6 +35,11 @@ describe('language', () => {
     expect(zh.limitations).toHaveLength(en.limitations.length);
   });
 
+  it('names the new feature badge for both UI languages', () => {
+    expect(strings('en').newFeatureBadge).toBe('NEW');
+    expect(strings('zh-CN').newFeatureBadge).toBe('新');
+  });
+
   it('describes every action in both languages', () => {
     const en = strings('en');
     const zh = strings('zh-CN');

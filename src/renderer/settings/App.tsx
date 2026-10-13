@@ -34,14 +34,16 @@ const MAC = PLATFORM === 'mac';
 /** macOS measures the screen in points. */
 const LENGTH_UNIT = MAC ? 'pt' : 'px';
 
-const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[] = [
+type SettingsSection = { id: string; label: (t: Strings) => string; icon: ReactNode; newFeature?: boolean };
+
+const SECTIONS: SettingsSection[] = [
   { id: 'trigger', label: (t) => t.navTrigger, icon: <Cursor24Regular /> },
   { id: 'toggle', label: (t) => t.navToggle, icon: <Keyboard24Regular /> },
   { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
   { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
   { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
-  { id: 'actions', label: (t) => t.navActions, icon: <Apps24Regular /> },
-  { id: 'chat', label: (t) => t.navChat, icon: <Chat24Regular /> },
+  { id: 'actions', label: (t) => t.navActions, icon: <Apps24Regular />, newFeature: true },
+  { id: 'chat', label: (t) => t.navChat, icon: <Chat24Regular />, newFeature: true },
   { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
   { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
 ];
@@ -67,6 +69,16 @@ function useDarkMode(): boolean {
     return () => m.removeEventListener('change', onChange);
   }, []);
   return dark;
+}
+
+function FeatureLabel({ children, isNew }: { children: ReactNode; isNew?: boolean }) {
+  const t = useText();
+  return (
+    <span className="featureLabel">
+      {children}
+      {isNew ? <span className="newFeatureBadge">{t.newFeatureBadge}</span> : null}
+    </span>
+  );
 }
 
 export function App() {
@@ -141,7 +153,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         {SECTIONS.map((sec) => (
           <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} onClick={() => showSection(sec.id)}>
             {sec.icon}
-            {sec.label(t)}
+            <FeatureLabel isNew={sec.newFeature}>{sec.label(t)}</FeatureLabel>
           </button>
         ))}
       </nav>
@@ -202,10 +214,10 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <div className="section" id="emotes">{t.navEmotes}</div>
         <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
 
-        <div className="section" id="actions">{t.navActions}</div>
+        <div className="section" id="actions"><FeatureLabel isNew>{t.navActions}</FeatureLabel></div>
         <ActionSection settings={s} update={update} />
 
-        <div className="section" id="chat">{t.navChat}</div>
+        <div className="section" id="chat"><FeatureLabel isNew>{t.navChat}</FeatureLabel></div>
         <ChatSection settings={s} update={update} onOpenRoom={() => showSection('room')} />
 
         <div className="section" id="room">{t.navRoom}</div>
@@ -215,7 +227,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
           checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
         {!MAC ? (
-          <SwitchRow icon={<Cursor24Regular />} title={t.cursorSkin}
+          <SwitchRow icon={<Cursor24Regular />} title={<FeatureLabel isNew>{t.cursorSkin}</FeatureLabel>}
             description={(
               <>
                 {t.cursorSkinDesc}
