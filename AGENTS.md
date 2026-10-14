@@ -63,7 +63,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Room chat keeps only the latest 200 in-memory messages. The chat composer placeholder should show two lines: the Enter/Shift+Enter send hint first, then the "recent 200 messages" retention hint.
 - Heartsteel room gameplay is a League-inspired room mini-game. Any active room member can toggle it for the room. Each user has persistent personal Heartsteel progress: base max health is 1000, saved bonus health starts at 0, displayed stacks equal bonus health, and hits add permanent bonus health only to the clicker.
 - Heartsteel hit math is integer based: damage is `Math.round(125 + maxHealth * 0.06)`, bonus gain is `Math.round(damage * 0.1)`, and no other player's health is reduced.
-- Heartsteel target scheduling should not introduce a room-owner concept. Elect the active member with the lowest peer id as the temporary scheduler; everyone still validates target ids and ignores duplicate/late hits.
+- Heartsteel target scheduling should not introduce a room-owner concept. Elect the active member with the lowest peer id as the temporary scheduler. Clickers send target claims, and only the scheduler broadcasts the final hit so all clients converge on one winner.
 - Heartsteel desktop targets should use conservative overlay hit testing. Keep normal desktop interaction click-through outside the active target, preferably with Windows `BrowserWindow.setShape()` around the target hit area.
 
 ## Development Habits

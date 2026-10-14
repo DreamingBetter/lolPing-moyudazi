@@ -44,8 +44,9 @@ The room has no server, so one current member acts as the temporary target sched
 - Elect the scheduler deterministically as the active member with the lowest peer id, including self.
 - If the scheduler leaves, everyone recomputes and the new lowest peer id continues scheduling.
 - Only the scheduler creates target spawn messages.
-- Any member may send a hit message for the current target.
-- Every client validates that the hit target id is currently active and not already resolved before applying the result.
+- Any member may send a claim message for the current target.
+- The current scheduler accepts the first valid claim it sees and broadcasts the final hit message.
+- Every client validates that the final hit target id is currently active and not already resolved before applying the result.
 - The winner's new `heartsteelBonusHealth` is included in later presence messages so room member health bars stay current.
 
 This approach avoids adding a room owner concept and keeps the feature resilient when people join or leave.
@@ -76,7 +77,8 @@ Add compatible room message types:
 
 - `heartsteelState`: announces enabled or disabled.
 - `heartsteelTarget`: announces a target id, display number, normalized x/y, created timestamp, and expiry timestamp.
-- `heartsteelHit`: announces target id, winner peer, damage, bonus gain, and winner bonus health after the hit.
+- `heartsteelClaim`: announces that the sender right-clicked the current target.
+- `heartsteelHit`: scheduler-authored final result with target id, winner peer, damage, bonus gain, and winner bonus health after the hit.
 
 Older app versions will ignore unknown message types after protocol support is added. If the change requires strict compatibility checks, bump the room protocol version and show the existing "needs update" badge.
 
@@ -133,6 +135,7 @@ Use ASCII aliases in code where practical if URL or packaging behavior around Ch
 
 - If the sound is missing, the hit should still resolve and visual feedback should still show. The About page can list the missing asset through the existing missing-assets mechanism.
 - If the target click IPC arrives after expiry or after another winner, ignore it.
+- If a non-scheduler receives a claim, ignore it; only the scheduler can turn a claim into a final hit.
 - If the scheduler changes during a visible target, keep the current target until it resolves or expires; the new scheduler starts future targets.
 - If a user leaves the room, their local persistent bonus health remains unchanged.
 
