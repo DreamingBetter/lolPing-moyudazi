@@ -290,6 +290,9 @@ function start(): void {
   room.on('state', pushRoom);
   room.on('chatState', pushChat);
   room.on('chatMessage', (m) => overlays.spawnChatDanmaku(m));
+  room.on('heartsteelBonusHealth', (heartsteelBonusHealth: number) => {
+    store.update({ heartsteelBonusHealth });
+  });
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
   overlays.on('shared', (p: SharedPing) => {
@@ -398,7 +401,11 @@ function start(): void {
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
-    if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor) room.profileChanged();
+    if (
+      s.displayName !== previous.displayName
+      || s.tagColor !== previous.tagColor
+      || s.heartsteelBonusHealth !== previous.heartsteelBonusHealth
+    ) room.profileChanged();
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
       syncRoomFlags();

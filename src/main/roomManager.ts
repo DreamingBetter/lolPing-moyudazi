@@ -3,8 +3,10 @@ import type { EmoteRef } from '../shared/emotes';
 import {
   HEARTSTEEL_TARGET_INTERVAL_MS,
   HEARTSTEEL_TARGET_TTL_MS,
+  calculateHeartsteelHitFromBonus,
   heartsteelMaxHealth,
   heartsteelSchedulerPeer,
+  isHeartsteelTargetId,
   normalizeHeartsteelBonusHealth,
   type HeartsteelHit,
   type HeartsteelTarget,
@@ -226,6 +228,15 @@ export class RoomManager extends EventEmitter {
     else this.clearHeartsteelTarget(null);
     this.sendShared({ t: 'heartsteelState', enabled: on }, { respectPause: false, useRelayCap: false });
     this.emitState();
+  }
+
+  claimHeartsteelTarget(id: string): void {
+    if (!isHeartsteelTargetId(id) || !this.isCurrentHeartsteelTarget(id)) return;
+    if (this.isHeartsteelScheduler()) {
+      this.acceptHeartsteelClaim(this.self, id);
+      return;
+    }
+    this.sendShared({ t: 'heartsteelClaim', id }, { respectPause: false, useRelayCap: false });
   }
 
   /** Sends a room packet over each member's current route, optionally applying ping/emote gates and relay caps. */
@@ -545,7 +556,23 @@ export class RoomManager extends EventEmitter {
       });
       return;
     }
-    if (msg.t === 'heartsteelClaim' || msg.t === 'heartsteelHit') return;
+    if (msg.t === 'heartsteelClaim') {
+      if (this.isHeartsteelScheduler()) this.acceptHeartsteelClaim(m.peer, msg.id);
+      return;
+    }
+    if (msg.t === 'heartsteelHit') {
+      if (heartsteelSchedulerPeer(this.heartsteelPeers()) === m.peer) {
+        this.applyHeartsteelHit({
+          id: msg.id,
+          winner: msg.winner,
+          damage: msg.damage,
+          bonusGain: msg.bonusGain,
+          bonusHealth: msg.bonusHealth,
+          ts: msg.ts,
+        });
+      }
+      return;
+    }
     if (msg.t !== 'ping' && msg.t !== 'emote') return;
     // Pings and emotes pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
@@ -840,12 +867,63 @@ export class RoomManager extends EventEmitter {
     this.setHeartsteelTarget(target);
   }
 
+  private acceptHeartsteelClaim(winner: string, id: string): void {
+    if (!this.isCurrentHeartsteelTarget(id) || this.resolvedHeartsteelTargets.has(id)) return;
+    const profile = this.deps.profile();
+    const member = winner === this.self ? null : this.members.get(winner);
+    if (winner !== this.self && !member) return;
+    const bonusBefore = winner === this.self ? profile.heartsteelBonusHealth : member!.heartsteelBonusHealth;
+    const result = calculateHeartsteelHitFromBonus(bonusBefore);
+    const bonusHealth = normalizeHeartsteelBonusHealth(bonusBefore + result.bonusGain);
+    this.sendShared(
+      { t: 'heartsteelHit', id, winner, damage: result.damage, bonusGain: result.bonusGain, bonusHealth },
+      { respectPause: false, useRelayCap: false },
+    );
+    this.applyHeartsteelHit({
+      id,
+      winner,
+      damage: result.damage,
+      bonusGain: result.bonusGain,
+      bonusHealth,
+      ts: this.deps.now(),
+    });
+  }
+
+  private applyHeartsteelHit(hit: Omit<HeartsteelHit, 'winnerName' | 'winnerColor' | 'maxHealth'>): void {
+    if (!this.isCurrentHeartsteelTarget(hit.id) || this.resolvedHeartsteelTargets.has(hit.id)) return;
+    const profile = this.deps.profile();
+    const member = hit.winner === this.self ? null : this.members.get(hit.winner);
+    if (hit.winner !== this.self && !member) return;
+    const winnerName = hit.winner === this.self ? profile.name : member!.name;
+    const winnerColor = hit.winner === this.self ? profile.color : member!.color;
+    const full: HeartsteelHit = {
+      ...hit,
+      bonusHealth: normalizeHeartsteelBonusHealth(hit.bonusHealth),
+      winnerName,
+      winnerColor,
+      maxHealth: heartsteelMaxHealth(hit.bonusHealth),
+    };
+    this.resolvedHeartsteelTargets.add(hit.id);
+    this.heartsteelLastHit = full;
+    if (hit.winner === this.self) this.emit('heartsteelBonusHealth', full.bonusHealth);
+    else member!.heartsteelBonusHealth = full.bonusHealth;
+    this.emit('heartsteelHit', { ...full } satisfies HeartsteelHit);
+    this.clearHeartsteelTarget({ id: hit.id });
+    this.emitState();
+  }
+
   private heartsteelPeers(): string[] {
     return [this.self, ...this.members.keys()];
   }
 
   private isHeartsteelScheduler(): boolean {
     return heartsteelSchedulerPeer(this.heartsteelPeers()) === this.self;
+  }
+
+  private isCurrentHeartsteelTarget(id: string): boolean {
+    return this.heartsteelEnabled
+      && this.heartsteelTarget?.id === id
+      && this.deps.now() <= this.heartsteelTarget.expiresAt;
   }
 
   private newHeartsteelTarget(now: number): HeartsteelTarget {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HeartsteelTarget } from '../../src/shared/heartsteel';
+import type { HeartsteelHit, HeartsteelTarget } from '../../src/shared/heartsteel';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
 import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
@@ -37,6 +37,18 @@ class Remote {
   }
   history(request: string, part: number, total: number, messages: unknown[]): void {
     this.lan.deliver(this.key, this.packet({ t: 'chatHistory', request, part, total, messages }));
+  }
+  state(enabled: boolean): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelState', enabled }));
+  }
+  target(id: string, d: number, x: number, y: number, createdAt: number, expiresAt: number): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelTarget', id, d, x, y, createdAt, expiresAt }));
+  }
+  claim(id: string): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelClaim', id }));
+  }
+  hit(id: string, winner: string, damage: number, bonusGain: number, bonusHealth: number): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelHit', id, winner, damage, bonusGain, bonusHealth }));
   }
   bye(): void {
     this.lan.deliver(this.key, this.packet({ t: 'bye' }));
@@ -96,6 +108,7 @@ beforeEach(() => {
   room.on('chatMessage', (m: LiveChatMessage) => liveChats.push(m));
   room.on('heartsteelTarget', (t: HeartsteelTarget) => heartsteelTargets.push(t));
   room.on('heartsteelClear', (t: { id: string } | null) => heartsteelClears.push(t));
+  room.on('heartsteelBonusHealth', (n: number) => { profile.heartsteelBonusHealth = n; });
 });
 
 afterEach(() => {
@@ -445,6 +458,75 @@ describe('heartsteel room state', () => {
     expect(room.state().heartsteel.target).toBeNull();
     await vi.advanceTimersByTimeAsync(600);
     expect(heartsteelTargets).toHaveLength(2);
+  });
+
+  it('scheduler turns the first valid claim into one final hit and local bonus gain', async () => {
+    const hits: HeartsteelHit[] = [];
+    const bonusUpdates: number[] = [];
+    room.on('heartsteelHit', (h: HeartsteelHit) => hits.push(h));
+    room.on('heartsteelBonusHealth', (n: number) => bonusUpdates.push(n));
+
+    await joinActive();
+    new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
+    lan.sent = [];
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    const target = heartsteelTargets[0];
+
+    room.claimHeartsteelTarget(target.id);
+
+    expect(hits).toEqual([
+      expect.objectContaining({
+        id: target.id,
+        winner: SELF,
+        winnerName: 'Me',
+        winnerColor: 1,
+        damage: 185,
+        bonusGain: 19,
+        bonusHealth: 19,
+        maxHealth: 1019,
+      }),
+    ]);
+    expect(bonusUpdates).toEqual([19]);
+    expect(room.state().heartsteel.target).toBeNull();
+    expect(sentMessages('lan:higher').filter((m) => m.t === 'heartsteelHit')).toHaveLength(1);
+
+    room.claimHeartsteelTarget(target.id);
+    expect(hits).toHaveLength(1);
+  });
+
+  it('non-schedulers broadcast a claim and wait for the scheduler hit', async () => {
+    await joinActive();
+    const lower = new Remote('0000000000000001', 'lan:lower', lan);
+    lower.presence();
+    lower.state(true);
+    lower.target('22222222222222222222222222222222', 1, 0.4, 0.5, Date.now(), Date.now() + 2400);
+
+    room.claimHeartsteelTarget('22222222222222222222222222222222');
+
+    expect(sentMessages('lan:lower').at(-1)).toMatchObject({ t: 'heartsteelClaim', id: '22222222222222222222222222222222' });
+    lower.hit('22222222222222222222222222222222', SELF, 185, 19, 19);
+    expect(room.state().members[0]).toMatchObject({ heartsteelBonusHealth: 19, heartsteelMaxHealth: 1019 });
+  });
+
+  it('scheduler resolves the first remote claim only', async () => {
+    const hits: HeartsteelHit[] = [];
+    room.on('heartsteelHit', (h: HeartsteelHit) => hits.push(h));
+    await joinActive();
+    const alex = new Remote('bbbbbbbbbbbbbbbb', 'lan:alex', lan);
+    const ben = new Remote('cccccccccccccccc', 'lan:ben', lan);
+    alex.presence({ heartsteelBonusHealth: 50 });
+    ben.presence({ heartsteelBonusHealth: 0 });
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    const target = heartsteelTargets[0];
+
+    alex.claim(target.id);
+    ben.claim(target.id);
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ winner: alex.peer, damage: 188, bonusGain: 19, bonusHealth: 69 });
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'heartsteelHit')).toHaveLength(1);
   });
 });
 
