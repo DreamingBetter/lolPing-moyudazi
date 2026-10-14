@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const electronBuilderCli = resolve(root, 'node_modules/electron-builder/out/cli/cli.js');
+const electronDist = resolve(root, 'node_modules/electron/dist');
 const env = { ...process.env };
 
 const mirrorEnvKeys = [
@@ -25,7 +27,7 @@ const result = spawnSync(
     '--win',
     '--publish',
     'never',
-    '--config.electronDist=node_modules/electron/dist',
+    ...(existsSync(resolve(electronDist, 'electron.exe')) ? ['--config.electronDist=node_modules/electron/dist'] : []),
     ...process.argv.slice(2),
   ],
   {
