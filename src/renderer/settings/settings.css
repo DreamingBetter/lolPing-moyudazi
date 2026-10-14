@@ -32,6 +32,7 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .desc { display: block; color: var(--text3); font-size: 12px; line-height: 16px; }
 .desc.inline { display: inline; margin-left: 6px; }
 .card .ctl { display: flex; align-items: center; gap: 10px; }
+.cursorSkinChoices { flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; }
 .value { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
 /* Fluent draws a tick per step on the rail; with 38-100 steps they merge into a dark dashed line. */
 .card .fui-Slider__rail::before { background-image: none; }

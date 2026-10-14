@@ -40,6 +40,17 @@ describe('language', () => {
     expect(strings('zh-CN').newFeatureBadge).toBe('NEW');
   });
 
+  it('labels the Summoner cursor radio choices in both UI languages', () => {
+    expect(strings('en').cursorSkin).toBe('Summoner cursor');
+    expect(strings('en').cursorSkinSystem).toBe('System cursor');
+    expect(strings('en').cursorSkinModern).toBe('New cursor');
+    expect(strings('en').cursorSkinClassic).toBe('Old cursor');
+    expect(strings('zh-CN').cursorSkin).toBe('召唤师鼠标指针');
+    expect(strings('zh-CN').cursorSkinSystem).toBe('系统指针');
+    expect(strings('zh-CN').cursorSkinModern).toBe('新版指针');
+    expect(strings('zh-CN').cursorSkinClassic).toBe('旧版指针');
+  });
+
   it('describes every action in both languages', () => {
     const en = strings('en');
     const zh = strings('zh-CN');

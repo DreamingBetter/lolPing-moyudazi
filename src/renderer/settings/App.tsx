@@ -1,4 +1,4 @@
-import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
+import { Dropdown, FluentProvider, Option, Radio, RadioGroup, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
   Apps24Regular, ArrowMove24Regular, ArrowSync24Regular, Chat24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular,
   MusicNote224Regular,
@@ -24,6 +24,7 @@ import { SettingRow, SliderRow, SwitchRow } from './components/rows';
 import { StatusCard } from './components/StatusCard';
 import { TriggerPicker } from './components/TriggerPicker';
 import { WheelEditor, type PoolItem } from './components/WheelEditor';
+import { cursorSkinPatchForScheme, cursorSkinSchemeFromSettings, type CursorSkinScheme } from './cursorSkinScheme';
 import { TextContext, useText } from './text';
 import { macDarkTheme, macLightTheme } from './macTheme';
 import { useAppState, type Update } from './useAppState';
@@ -232,28 +233,28 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
           checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
         {!MAC ? (
-          <>
-            <SwitchRow icon={<Cursor24Regular />} title={<FeatureLabel isNew>{t.cursorSkin}</FeatureLabel>}
-              description={(
-                <>
-                  {t.cursorSkinDesc}
-                  {cursorSkinError ? <span className="desc">{cursorSkinError}</span> : null}
-                </>
-              )}
-              checked={s.cursorSkinEnabled}
-              onChange={(v) => {
-                void update({ cursorSkinEnabled: v }).then((result) => {
+          <SettingRow icon={<Cursor24Regular />} title={<FeatureLabel isNew>{t.cursorSkin}</FeatureLabel>}
+            description={(
+              <>
+                {t.cursorSkinDesc}
+                {cursorSkinError ? <span className="desc">{cursorSkinError}</span> : null}
+              </>
+            )}>
+            <RadioGroup
+              className="cursorSkinChoices"
+              layout="horizontal"
+              value={cursorSkinSchemeFromSettings(s)}
+              onChange={(_, d) => {
+                void update(cursorSkinPatchForScheme(d.value as CursorSkinScheme)).then((result) => {
                   setCursorSkinError(result.ok ? null : result.error);
                 });
-              }} />
-            <SwitchRow icon={<Cursor24Regular />} title={t.cursorSkinClassic} description={t.cursorSkinClassicDesc}
-              checked={s.cursorSkinClassic}
-              onChange={(v) => {
-                void update({ cursorSkinClassic: v }).then((result) => {
-                  setCursorSkinError(result.ok ? null : result.error);
-                });
-              }} />
-          </>
+              }}
+            >
+              <Radio value="system" label={t.cursorSkinSystem} />
+              <Radio value="modern" label={t.cursorSkinModern} />
+              <Radio value="classic" label={t.cursorSkinClassic} />
+            </RadioGroup>
+          </SettingRow>
         ) : null}
         <SettingRow icon={<LocalLanguage24Regular />} title={t.language} description={t.languageDesc}>
           <Dropdown
