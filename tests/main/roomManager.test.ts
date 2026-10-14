@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { HeartsteelTarget } from '../../src/shared/heartsteel';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
 import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
@@ -44,13 +45,15 @@ class Remote {
 
 let lan: FakeTransport;
 let room: RoomManager;
-let profile: { name: string; color: number; limit: number };
+let profile: { name: string; color: number; limit: number; heartsteelBonusHealth: number };
 let pings: RemotePing[];
 let emotes: RemoteEmote[];
 let toasts: RoomToast[];
 let saved: (string | null)[];
 let chats: RoomChatState[];
 let liveChats: LiveChatMessage[];
+let heartsteelTargets: HeartsteelTarget[];
+let heartsteelClears: Array<{ id: string } | null>;
 
 function sentMessages(to?: string): RoomMessage[] {
   return lan.sent
@@ -66,13 +69,15 @@ async function joinActive(): Promise<void> {
 beforeEach(() => {
   vi.useFakeTimers({ now: 1_780_000_000_000 });
   lan = new FakeTransport('lan');
-  profile = { name: 'Me', color: 1, limit: 5 };
+  profile = { name: 'Me', color: 1, limit: 5, heartsteelBonusHealth: 0 };
   pings = [];
   emotes = [];
   toasts = [];
   saved = [];
   chats = [];
   liveChats = [];
+  heartsteelTargets = [];
+  heartsteelClears = [];
   room = new RoomManager({
     transports: [lan],
     now: () => Date.now(),
@@ -80,6 +85,7 @@ beforeEach(() => {
     deriveKeys: async () => KEYS,
     appVersion: '0.3.0',
     profile: () => profile,
+    displayNumbers: () => [1, 2],
     resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
   });
   room.on('remotePing', (p: RemotePing) => pings.push(p));
@@ -88,6 +94,8 @@ beforeEach(() => {
   room.on('saveCode', (c: string | null) => saved.push(c));
   room.on('chatState', (s: RoomChatState) => chats.push(s));
   room.on('chatMessage', (m: LiveChatMessage) => liveChats.push(m));
+  room.on('heartsteelTarget', (t: HeartsteelTarget) => heartsteelTargets.push(t));
+  room.on('heartsteelClear', (t: { id: string } | null) => heartsteelClears.push(t));
 });
 
 afterEach(() => {
@@ -382,6 +390,64 @@ describe('incoming emotes', () => {
   });
 });
 
+describe('heartsteel room state', () => {
+  it('shows personal Heartsteel health on members and starts disabled', async () => {
+    profile.heartsteelBonusHealth = 57;
+    await joinActive();
+    const state = room.state();
+    expect(state.heartsteel).toEqual({ enabled: false, target: null, lastHit: null });
+    expect(state.members[0]).toMatchObject({
+      self: true,
+      heartsteelBonusHealth: 57,
+      heartsteelMaxHealth: 1057,
+    });
+  });
+
+  it('syncs the Heartsteel enabled state to room members', async () => {
+    await joinActive();
+    new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
+    lan.sent = [];
+    room.setHeartsteelEnabled(true);
+    expect(room.state().heartsteel.enabled).toBe(true);
+    expect(sentMessages('lan:higher').at(-1)).toMatchObject({ t: 'heartsteelState', enabled: true });
+
+    room.setHeartsteelEnabled(false);
+    expect(room.state().heartsteel.enabled).toBe(false);
+    expect(room.state().heartsteel.target).toBeNull();
+    expect(heartsteelClears.at(-1)).toBeNull();
+  });
+
+  it('only the lowest peer id schedules targets every 3 seconds', async () => {
+    await joinActive();
+    new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
+    lan.sent = [];
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
+    expect(sentMessages('lan:higher').filter((m) => m.t === 'heartsteelTarget').at(-1)).toMatchObject({
+      t: 'heartsteelTarget',
+      id: heartsteelTargets[0].id,
+    });
+
+    const lower = new Remote('0000000000000001', 'lan:lower', lan);
+    lower.presence();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
+  });
+
+  it('expires an unclaimed target and schedules the next one', async () => {
+    await joinActive();
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    const first = heartsteelTargets[0];
+    await vi.advanceTimersByTimeAsync(2401);
+    expect(heartsteelClears.at(-1)).toEqual({ id: first.id });
+    expect(room.state().heartsteel.target).toBeNull();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(heartsteelTargets).toHaveLength(2);
+  });
+});
+
 describe('outgoing', () => {
   it('sends an emote to each member over its path, and nothing when idle or paused', async () => {
     room.sendEmote('gg', { d: 1, x: 0.1, y: 0.2 });
@@ -484,7 +550,7 @@ describe('outgoing', () => {
     let n = 0;
     const fresh = new RoomManager({
       transports: [lan], now: () => Date.now(), randomBytes: (k) => Uint8Array.from({ length: k }, () => ++n & 255),
-      deriveKeys: async () => KEYS, appVersion: '0.3.0', profile: () => profile, resolveTarget: () => null,
+      deriveKeys: async () => KEYS, appVersion: '0.3.0', profile: () => profile, displayNumbers: () => [1], resolveTarget: () => null,
     });
     await fresh.join(CODE);
     const first = sentMessages('*').at(-1)!;
@@ -500,7 +566,7 @@ describe('outgoing', () => {
   it('goes back to idle and reports failure when the keys cannot be derived', async () => {
     const broken = new RoomManager({
       transports: [lan], now: () => Date.now(), randomBytes: (k) => new Uint8Array(k), appVersion: '0.3.0',
-      deriveKeys: async () => { throw new Error('out of memory'); }, profile: () => profile, resolveTarget: () => null,
+      deriveKeys: async () => { throw new Error('out of memory'); }, profile: () => profile, displayNumbers: () => [1], resolveTarget: () => null,
     });
     expect(await broken.join(CODE)).toEqual({ ok: false, error: 'failed' });
     expect(broken.state().phase).toBe('idle');
@@ -529,6 +595,7 @@ describe('two transports', () => {
     both = new RoomManager({
       transports: [lan, net], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xcd),
       deriveKeys: async () => KEYS, appVersion: '0.3.0', profile: () => profile,
+      displayNumbers: () => [1],
       resolveTarget: () => ({ displayId: 1, width: 100, height: 100 }),
     });
     both.on('remotePing', (p: RemotePing) => got.push(p));
@@ -760,6 +827,7 @@ describe('internet over a shared transport', () => {
     const r = new RoomManager({
       transports, now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xef),
       deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => profile,
+      displayNumbers: () => [1],
       resolveTarget: () => ({ displayId: 1, width: 100, height: 100 }),
     });
     r.on('toast', (t: RoomToast) => gone.push(t));

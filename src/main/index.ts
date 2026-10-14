@@ -155,7 +155,13 @@ function start(): void {
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
     appVersion: app.getVersion(),
-    profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit }),
+    profile: () => ({
+      name: settings.displayName,
+      color: settings.tagColor,
+      limit: settings.incomingPingLimit,
+      heartsteelBonusHealth: settings.heartsteelBonusHealth,
+    }),
+    displayNumbers: () => overlays.numbered().map((d) => d.number),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
