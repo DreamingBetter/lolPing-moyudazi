@@ -1,7 +1,12 @@
 import { BrowserWindow, ipcMain, screen, type Display, type Rectangle, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
-import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
-import { HEARTSTEEL_TARGET_HIT_RADIUS_PX, isHeartsteelTargetId, type HeartsteelCursorKind } from '../shared/heartsteel';
+import { EMOTE_DURATION_S, isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
+import {
+  HEARTSTEEL_HIT_FEEDBACK_MS,
+  HEARTSTEEL_TARGET_HIT_RADIUS_PX,
+  isHeartsteelTargetId,
+  type HeartsteelCursorKind,
+} from '../shared/heartsteel';
 import {
   OVERLAY_ACTIONED, OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_HEARTSTEEL_CLAIM, OVERLAY_PINGED,
   type OverlayChannel, type OverlayEvents, type PingTag,
@@ -65,6 +70,9 @@ export class OverlayManager extends EventEmitter {
   private numberedList: NumberedDisplay[] = [];
   private wheelDisplay: number | null = null;
   private wheelKind: WheelKind = 'ping';
+  private readonly heartsteelShapes = new Map<number, Map<string, Rectangle>>();
+  private readonly suspendedHeartsteelShapes = new Set<number>();
+  private readonly heartsteelShapeRestoreTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
   /** `resolveArt` says what an emote looks like: `remote` is true for a room member's, whose files may be missing here. */
   constructor(private settings: OverlaySettings, private readonly resolveArt: (ref: EmoteRef, remote: boolean) => EmoteArt) {
@@ -121,6 +129,7 @@ export class OverlayManager extends EventEmitter {
         if (!p) return;
         this.wheelDisplay = p.displayId;
         this.wheelKind = ev.wheel;
+        this.suspendHeartsteelShapes(p.displayId);
         this.send(p.displayId, 'wheel:open', { x: p.x, y: p.y, wheel: ev.wheel });
         break;
       }
@@ -129,8 +138,18 @@ export class OverlayManager extends EventEmitter {
         if (this.wheelDisplay === null) return;
         const p = physicalToLocal(ev.x, ev.y, this.maps, this.wheelDisplay);
         if (!p) return;
+        const displayId = this.wheelDisplay;
         this.send(p.displayId, ev.type === 'wheelMove' ? 'wheel:move' : 'wheel:release', { x: p.x, y: p.y, wheel: this.wheelKind });
-        if (ev.type === 'wheelRelease') this.wheelDisplay = null;
+        if (ev.type === 'wheelRelease') {
+          const holdMs = this.wheelKind === 'emote'
+            ? this.emoteEffectMs()
+            : this.wheelKind === 'ping'
+              ? this.pingEffectMs()
+              : 0;
+          this.wheelDisplay = null;
+          if (holdMs > 0) this.suspendHeartsteelShapesForEffect(displayId, holdMs);
+          else this.restoreHeartsteelShapes(displayId);
+        }
         break;
       }
       case 'click': {
@@ -138,11 +157,13 @@ export class OverlayManager extends EventEmitter {
         if (!p) break;
         if (ev.wheel === 'emote') {
           const ref = this.settings.clickEmoteId;
+          this.suspendHeartsteelShapesForEffect(p.displayId, this.emoteEffectMs());
           this.send(p.displayId, 'emote:spawn', { owner: 'self', art: this.resolveArt(ref, false), x: p.x, y: p.y });
           this.clearElsewhere(p.displayId, 'self');
           this.emit('sharedEmote', { ref, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedEmote);
           break;
         }
+        this.suspendHeartsteelShapesForEffect(p.displayId, this.pingEffectMs());
         this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
         this.emit('shared', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
         break;
@@ -157,22 +178,26 @@ export class OverlayManager extends EventEmitter {
 
   previewPing(id: PingId): void {
     const d = screen.getPrimaryDisplay();
+    this.suspendHeartsteelShapesForEffect(d.id, this.pingEffectMs());
     this.send(d.id, 'ping:spawn', { id, x: d.bounds.width / 2, y: d.bounds.height / 2 });
   }
 
   /** A room member's ping, already mapped onto one of our displays. */
   spawnRemote(p: { displayId: number; x: number; y: number; id: PingId; tag: PingTag }): void {
+    this.suspendHeartsteelShapesForEffect(p.displayId, this.pingEffectMs());
     this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag });
   }
 
   /** Shows an emote in the middle of the main display, without sharing it (the settings page's preview). */
   previewEmote(ref: EmoteRef): void {
     const d = screen.getPrimaryDisplay();
+    this.suspendHeartsteelShapesForEffect(d.id, this.emoteEffectMs());
     this.send(d.id, 'emote:spawn', { owner: 'preview', art: this.resolveArt(ref, false), x: d.bounds.width / 2, y: d.bounds.height / 2 });
   }
 
   /** A room member's emote, already mapped onto one of our displays. It replaces their earlier one, whichever display that was on. */
   spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; peer: string; tag: PingTag }): void {
+    this.suspendHeartsteelShapesForEffect(p.displayId, this.emoteEffectMs());
     this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: this.resolveArt(p.ref, true), x: p.x, y: p.y, tag: p.tag });
     this.clearElsewhere(p.displayId, p.peer);
   }
@@ -206,17 +231,66 @@ export class OverlayManager extends EventEmitter {
       cursor: payload.cursor,
     });
     const r = HEARTSTEEL_TARGET_HIT_RADIUS_PX;
-    w.setIgnoreMouseEvents(false);
-    w.setShape([{ x: Math.round(payload.x - r), y: Math.round(payload.y - r), width: r * 2, height: r * 2 }]);
+    const shapes = this.heartsteelShapes.get(payload.displayId) ?? new Map<string, Rectangle>();
+    shapes.set(payload.id, { x: Math.round(payload.x - r), y: Math.round(payload.y - r), width: r * 2, height: r * 2 });
+    this.heartsteelShapes.set(payload.displayId, shapes);
+    this.applyHeartsteelShapes(payload.displayId);
   }
 
   clearHeartsteelTarget(id?: string): void {
     for (const [displayId, w] of this.windows) {
       this.send(displayId, 'heartsteel:clear', id ? { id } : null);
       if (w.isDestroyed()) continue;
+      if (id) this.heartsteelShapes.get(displayId)?.delete(id);
+      else this.heartsteelShapes.delete(displayId);
+      this.applyHeartsteelShapes(displayId);
+    }
+  }
+
+  private applyHeartsteelShapes(displayId: number): void {
+    const w = this.windows.get(displayId);
+    if (!w || w.isDestroyed()) return;
+    if (this.suspendedHeartsteelShapes.has(displayId)) {
       w.setShape([]);
       w.setIgnoreMouseEvents(true);
+      return;
     }
+    const shapes = [...(this.heartsteelShapes.get(displayId)?.values() ?? [])];
+    w.setShape(shapes);
+    w.setIgnoreMouseEvents(shapes.length === 0);
+  }
+
+  private suspendHeartsteelShapes(displayId: number): void {
+    const w = this.windows.get(displayId);
+    if (!w || w.isDestroyed()) return;
+    const timer = this.heartsteelShapeRestoreTimers.get(displayId);
+    if (timer) clearTimeout(timer);
+    this.heartsteelShapeRestoreTimers.delete(displayId);
+    this.suspendedHeartsteelShapes.add(displayId);
+    w.setShape([]);
+    w.setIgnoreMouseEvents(true);
+  }
+
+  private suspendHeartsteelShapesForEffect(displayId: number, holdMs: number): void {
+    const w = this.windows.get(displayId);
+    if (!w || w.isDestroyed()) return;
+    const previous = this.heartsteelShapeRestoreTimers.get(displayId);
+    if (previous) clearTimeout(previous);
+    this.suspendedHeartsteelShapes.add(displayId);
+    w.setShape([]);
+    w.setIgnoreMouseEvents(true);
+    this.heartsteelShapeRestoreTimers.set(displayId, setTimeout(() => {
+      this.heartsteelShapeRestoreTimers.delete(displayId);
+      this.restoreHeartsteelShapes(displayId);
+    }, Math.max(0, Math.round(holdMs))));
+  }
+
+  private restoreHeartsteelShapes(displayId: number): void {
+    const timer = this.heartsteelShapeRestoreTimers.get(displayId);
+    if (timer) clearTimeout(timer);
+    this.heartsteelShapeRestoreTimers.delete(displayId);
+    this.suspendedHeartsteelShapes.delete(displayId);
+    this.applyHeartsteelShapes(displayId);
   }
 
   showHeartsteelHit(payload: {
@@ -229,6 +303,7 @@ export class OverlayManager extends EventEmitter {
     damage: number;
     bonusGain: number;
   }): void {
+    this.suspendHeartsteelShapesForEffect(payload.displayId, HEARTSTEEL_HIT_FEEDBACK_MS);
     this.send(payload.displayId, 'heartsteel:hit', {
       id: payload.id,
       x: payload.x,
@@ -241,6 +316,8 @@ export class OverlayManager extends EventEmitter {
   }
 
   destroy(): void {
+    for (const timer of this.heartsteelShapeRestoreTimers.values()) clearTimeout(timer);
+    this.heartsteelShapeRestoreTimers.clear();
     for (const w of this.windows.values()) if (!w.isDestroyed()) w.destroy();
     this.windows.clear();
   }
@@ -248,8 +325,10 @@ export class OverlayManager extends EventEmitter {
   /** Dismisses a wheel that is on screen, if any. Also used when the helper stops: its cancel would never arrive. */
   cancelWheel(): void {
     if (this.wheelDisplay === null) return;
-    this.send(this.wheelDisplay, 'wheel:cancel', null);
+    const displayId = this.wheelDisplay;
+    this.send(displayId, 'wheel:cancel', null);
     this.wheelDisplay = null;
+    this.restoreHeartsteelShapes(displayId);
   }
 
   private displayOf(sender: WebContents): number | undefined {
@@ -260,6 +339,14 @@ export class OverlayManager extends EventEmitter {
   /** Each owner has one emote on screen: clear theirs on every display but the one that just showed their new one. */
   private clearElsewhere(displayId: number, owner: string): void {
     for (const id of this.windows.keys()) if (id !== displayId) this.send(id, 'emote:clear', { owner });
+  }
+
+  private pingEffectMs(): number {
+    return Math.round(this.settings.pingDurationS * 1000 + 200);
+  }
+
+  private emoteEffectMs(): number {
+    return Math.round(EMOTE_DURATION_S * 1000 + 200);
   }
 
   private rebuild(): void {

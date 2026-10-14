@@ -66,6 +66,7 @@ let chats: RoomChatState[];
 let liveChats: LiveChatMessage[];
 let heartsteelTargets: HeartsteelTarget[];
 let heartsteelClears: Array<{ id: string } | null>;
+let heartsteelConfig: { targetCap: number; targetLifetimeMs: number; targetPace: 'steelOnce' | 'normalSteel' | 'funSteel' };
 
 function sentMessages(to?: string): RoomMessage[] {
   return lan.sent
@@ -90,13 +91,20 @@ beforeEach(() => {
   liveChats = [];
   heartsteelTargets = [];
   heartsteelClears = [];
+  heartsteelConfig = { targetCap: 3, targetLifetimeMs: 4200, targetPace: 'normalSteel' };
+  let targetByte = 0;
   room = new RoomManager({
     transports: [lan],
     now: () => Date.now(),
-    randomBytes: (n) => new Uint8Array(n).fill(0xab),
+    randomBytes: (n) => {
+      if (n === 8) return new Uint8Array(n).fill(0xab);
+      if (n === 16) return new Uint8Array(n).fill(++targetByte);
+      return new Uint8Array(n);
+    },
     deriveKeys: async () => KEYS,
     appVersion: '0.3.0',
     profile: () => profile,
+    heartsteelConfig: () => heartsteelConfig,
     displayNumbers: () => [1, 2],
     resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
   });
@@ -438,7 +446,7 @@ describe('heartsteel room state', () => {
     expect(room.state().phase).toBe('idle');
     expect(room.state().heartsteel.enabled).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(2999);
+    await vi.advanceTimersByTimeAsync(899);
     expect(heartsteelTargets).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(heartsteelTargets).toHaveLength(1);
@@ -464,25 +472,40 @@ describe('heartsteel room state', () => {
     expect(sentMessages().filter((m) => m.t.startsWith('heartsteel'))).toEqual([]);
   });
 
+  it('can keep multiple local Heartsteel targets on screen up to the configured cap', async () => {
+    room.setHeartsteelEnabled(true);
+
+    await vi.advanceTimersByTimeAsync(900);
+    expect(heartsteelTargets).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(heartsteelTargets).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(heartsteelTargets).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(heartsteelTargets).toHaveLength(3);
+
+    expect(new Set(heartsteelTargets.map((target) => target.id)).size).toBe(3);
+  });
+
   it('returns to local Heartsteel after leaving a room while enabled', async () => {
     await joinActive();
     room.setHeartsteelEnabled(true);
     room.leave();
 
     expect(room.state()).toMatchObject({ phase: 'idle', heartsteel: { enabled: true } });
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(900);
     expect(heartsteelTargets).toHaveLength(1);
   });
 
   it('clears local Heartsteel targets when quitting from idle', async () => {
     room.setHeartsteelEnabled(true);
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(900);
     expect(room.state().heartsteel.target).toBeTruthy();
 
     room.quit();
 
     expect(room.state().heartsteel).toEqual({ enabled: false, target: null, lastHit: null });
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(900);
     expect(heartsteelTargets).toHaveLength(1);
   });
 
@@ -500,12 +523,12 @@ describe('heartsteel room state', () => {
     expect(heartsteelClears.at(-1)).toBeNull();
   });
 
-  it('only the lowest peer id schedules targets every 3 seconds', async () => {
+  it('only the lowest peer id schedules targets at the configured pace', async () => {
     await joinActive();
     new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
     lan.sent = [];
     room.setHeartsteelEnabled(true);
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(900);
     expect(heartsteelTargets).toHaveLength(1);
     expect(sentMessages('lan:higher').filter((m) => m.t === 'heartsteelTarget').at(-1)).toMatchObject({
       t: 'heartsteelTarget',
@@ -514,20 +537,22 @@ describe('heartsteel room state', () => {
 
     const lower = new Remote('0000000000000001', 'lan:lower', lan);
     lower.presence();
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(900);
     expect(heartsteelTargets).toHaveLength(1);
   });
 
-  it('expires an unclaimed target and schedules the next one', async () => {
+  it('expires unclaimed targets and keeps the visible set topped up under the cap', async () => {
     await joinActive();
     room.setHeartsteelEnabled(true);
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(900);
     const first = heartsteelTargets[0];
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(heartsteelTargets).toHaveLength(3);
     await vi.advanceTimersByTimeAsync(2401);
     expect(heartsteelClears.at(-1)).toEqual({ id: first.id });
-    expect(room.state().heartsteel.target).toBeNull();
-    await vi.advanceTimersByTimeAsync(600);
-    expect(heartsteelTargets).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(heartsteelTargets).toHaveLength(4);
+    expect(room.state().heartsteel.target?.id).not.toBe(first.id);
   });
 
   it('scheduler turns the first valid claim into one final hit and local bonus gain', async () => {
@@ -540,7 +565,7 @@ describe('heartsteel room state', () => {
     new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
     lan.sent = [];
     room.setHeartsteelEnabled(true);
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(900);
     const target = heartsteelTargets[0];
 
     room.claimHeartsteelTarget(target.id);
@@ -558,7 +583,7 @@ describe('heartsteel room state', () => {
       }),
     ]);
     expect(bonusUpdates).toEqual([25]);
-    expect(room.state().heartsteel.target).toBeNull();
+    expect(room.state().heartsteel.target?.id).not.toBe(target.id);
     expect(sentMessages('lan:higher').filter((m) => m.t === 'heartsteelHit')).toHaveLength(1);
 
     room.claimHeartsteelTarget(target.id);

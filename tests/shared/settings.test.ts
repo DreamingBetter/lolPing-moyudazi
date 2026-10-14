@@ -158,6 +158,27 @@ describe('room settings', () => {
       heartsteelWidgetPosition: null,
     });
   });
+
+  it('normalizes only the Heartsteel entertainment pace user setting', () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({
+      heartsteelTargetPace: 'normalSteel',
+    });
+    expect(normalizeSettings({
+      heartsteelTargetCap: 5,
+      heartsteelTargetPace: 'funSteel',
+      heartsteelTargetLifetimeS: 5.55,
+    })).toMatchObject({
+      heartsteelTargetPace: 'funSteel',
+    });
+    const normalized = normalizeSettings({
+      heartsteelTargetCap: 99,
+      heartsteelTargetPace: 'turbo',
+      heartsteelTargetLifetimeS: 99,
+    });
+    expect(normalized).toMatchObject({ heartsteelTargetPace: 'normalSteel' });
+    expect('heartsteelTargetCap' in normalized).toBe(false);
+    expect('heartsteelTargetLifetimeS' in normalized).toBe(false);
+  });
 });
 
 describe('chat danmaku settings', () => {

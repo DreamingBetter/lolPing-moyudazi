@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   HEARTSTEEL_BASE_HEALTH,
+  HEARTSTEEL_TARGET_PACE_RANGES_MS,
+  DEFAULT_HEARTSTEEL_RUNTIME_CONFIG,
   calculateHeartsteelHit,
   calculateHeartsteelHitFromBonus,
   heartsteelMaxHealth,
+  heartsteelRuntimeConfigForPace,
   heartsteelSchedulerPeer,
+  heartsteelSpawnDelayMs,
   heartsteelStacks,
   isHeartsteelTargetId,
   normalizeHeartsteelBonusHealth,
@@ -32,5 +36,19 @@ describe('heartsteel math', () => {
     expect(isHeartsteelTargetId('ABC')).toBe(false);
     expect(heartsteelSchedulerPeer(['bbbbbbbbbbbbbbbb', 'aaaaaaaaaaaaaaaa', 'cccccccccccccccc'])).toBe('aaaaaaaaaaaaaaaa');
     expect(heartsteelSchedulerPeer([])).toBeNull();
+  });
+
+  it('maps Heartsteel entertainment pace labels to randomized spawn delays', () => {
+    expect(HEARTSTEEL_TARGET_PACE_RANGES_MS).toEqual({
+      steelOnce: { min: 1800, max: 2800, targetCap: 1, targetLifetimeMs: 3400 },
+      normalSteel: { min: 900, max: 1600, targetCap: 3, targetLifetimeMs: 4200 },
+      funSteel: { min: 450, max: 900, targetCap: 5, targetLifetimeMs: 4800 },
+    });
+    expect(DEFAULT_HEARTSTEEL_RUNTIME_CONFIG).toEqual({ targetCap: 3, targetLifetimeMs: 4200, targetPace: 'normalSteel' });
+    expect(heartsteelRuntimeConfigForPace('steelOnce')).toEqual({ targetCap: 1, targetLifetimeMs: 3400, targetPace: 'steelOnce' });
+    expect(heartsteelRuntimeConfigForPace('funSteel')).toEqual({ targetCap: 5, targetLifetimeMs: 4800, targetPace: 'funSteel' });
+    expect(heartsteelSpawnDelayMs('normalSteel', 0)).toBe(900);
+    expect(heartsteelSpawnDelayMs('normalSteel', 255)).toBe(1600);
+    expect(heartsteelSpawnDelayMs('funSteel', 128)).toBe(676);
   });
 });

@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
-import type { HeartsteelCursorKind } from '../shared/heartsteel';
+import { heartsteelRuntimeConfigForPace, type HeartsteelCursorKind } from '../shared/heartsteel';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { hotkeyLabel } from '../shared/keys';
 import { announcedEmoteHashes } from '../shared/emotes';
@@ -176,6 +176,7 @@ function start(): void {
       limit: settings.incomingPingLimit,
       heartsteelBonusHealth: settings.heartsteelBonusHealth,
     }),
+    heartsteelConfig: () => heartsteelRuntimeConfigForPace(settings.heartsteelTargetPace),
     displayNumbers: () => overlays.numbered().map((d) => d.number),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
@@ -347,7 +348,7 @@ function start(): void {
   });
   room.on('heartsteelClear', (target: { id: string } | null) => overlays.clearHeartsteelTarget(target?.id));
   room.on('heartsteelHit', (hit) => {
-    const target = room.state().heartsteel.target;
+    const target = hit.target;
     if (!target) return;
     const display = resolveTarget(overlays.numbered(), target.d);
     if (!display) return;

@@ -1,4 +1,4 @@
-export const NEW_FEATURE_SECTION_IDS = ['actions', 'chat', 'app'] as const;
+export const NEW_FEATURE_SECTION_IDS = ['actions', 'chat', 'room', 'app'] as const;
 
 const NEW_FEATURE_SECTIONS = new Set<string>(NEW_FEATURE_SECTION_IDS);
 

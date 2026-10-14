@@ -112,6 +112,17 @@ describe('HeartsteelStage', () => {
     expect(reports).toEqual([{ id: 'a'.repeat(32), x: 31, y: 41 }]);
   });
 
+  it('keeps multiple Heartsteel targets until each one is cleared', () => {
+    const stage = new HeartsteelStage(root as unknown as HTMLElement, vi.fn(), { play: vi.fn() });
+    stage.showTarget({ id: 'a'.repeat(32), x: 30, y: 40, expiresAt: Date.now() + 1000, cursor: 'modern' });
+    stage.showTarget({ id: 'b'.repeat(32), x: 130, y: 140, expiresAt: Date.now() + 1000, cursor: 'modern' });
+
+    expect(root.children.filter((child) => child.className.includes('heartsteelTarget'))).toHaveLength(2);
+    stage.clear('a'.repeat(32));
+    expect(root.children.filter((child) => child.className.includes('heartsteelTarget'))).toHaveLength(1);
+    expect(root.children[0].style.left).toBe('130px');
+  });
+
   it('shows hit feedback and plays the Heartsteel sound', () => {
     const sound = { play: vi.fn() };
     const stage = new HeartsteelStage(root as unknown as HTMLElement, vi.fn(), sound, () => 0.5, 1.6);
@@ -121,6 +132,21 @@ describe('HeartsteelStage', () => {
     expect(root.textContent).toContain('Alex');
     expect(sound.play).toHaveBeenCalledWith('heartsteel', 0.8);
     expect(root.querySelector('.heartsteelHit')!.style.values.get('--heartsteel-bonus-color')).toBe('#49d86a');
+    expect(root.querySelector('.heartsteelHit')!.style.values.get('--heartsteel-damage-color')).toBe('#ff3b3b');
+  });
+
+  it('lets hit feedback finish even if the target expires or is cleared right after the hit', () => {
+    const id = 'd'.repeat(32);
+    const stage = new HeartsteelStage(root as unknown as HTMLElement, vi.fn(), { play: vi.fn() });
+    stage.showTarget({ id, x: 80, y: 90, expiresAt: Date.now() + 40, cursor: 'modern' });
+
+    stage.showHit({ id, x: 80, y: 90, winnerName: 'Alex', winnerColor: 2, damage: 185, bonusGain: 19 });
+    stage.clear(id);
+    vi.advanceTimersByTime(1600);
+
+    expect(root.querySelector('.heartsteelHit')).not.toBeNull();
+    vi.advanceTimersByTime(200);
+    expect(root.querySelector('.heartsteelHit')).toBeNull();
   });
 
   it('caps the boosted Heartsteel sound at full shared volume', () => {

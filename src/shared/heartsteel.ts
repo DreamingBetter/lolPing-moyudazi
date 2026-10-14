@@ -1,8 +1,35 @@
 export const HEARTSTEEL_BASE_HEALTH = 2000;
 export const HEARTSTEEL_BONUS_MAX = 999_999;
-export const HEARTSTEEL_TARGET_INTERVAL_MS = 3000;
-export const HEARTSTEEL_TARGET_TTL_MS = 2400;
+export const HEARTSTEEL_TARGET_TTL_MS = 4200;
 export const HEARTSTEEL_TARGET_HIT_RADIUS_PX = 48;
+export const HEARTSTEEL_HIT_FEEDBACK_MS = 1800;
+export const HEARTSTEEL_TARGET_CAP_DEFAULT = 3;
+export const HEARTSTEEL_TARGET_LIFETIME_S_DEFAULT = 4.2;
+export const HEARTSTEEL_TARGET_TICK_MS = 250;
+export const HEARTSTEEL_TARGET_PACES = ['steelOnce', 'normalSteel', 'funSteel'] as const;
+export type HeartsteelTargetPace = typeof HEARTSTEEL_TARGET_PACES[number];
+export const HEARTSTEEL_TARGET_PACE_RANGES_MS: Record<HeartsteelTargetPace, {
+  min: number;
+  max: number;
+  targetCap: number;
+  targetLifetimeMs: number;
+}> = {
+  steelOnce: { min: 1800, max: 2800, targetCap: 1, targetLifetimeMs: 3400 },
+  normalSteel: { min: 900, max: 1600, targetCap: 3, targetLifetimeMs: 4200 },
+  funSteel: { min: 450, max: 900, targetCap: 5, targetLifetimeMs: 4800 },
+};
+
+export interface HeartsteelRuntimeConfig {
+  targetCap: number;
+  targetLifetimeMs: number;
+  targetPace: HeartsteelTargetPace;
+}
+
+export const DEFAULT_HEARTSTEEL_RUNTIME_CONFIG: HeartsteelRuntimeConfig = {
+  targetCap: HEARTSTEEL_TARGET_CAP_DEFAULT,
+  targetLifetimeMs: HEARTSTEEL_TARGET_TTL_MS,
+  targetPace: 'normalSteel',
+};
 
 export interface HeartsteelHitResult {
   damage: number;
@@ -25,6 +52,7 @@ export interface HeartsteelHit {
   winner: string;
   winnerName: string;
   winnerColor: number;
+  target: HeartsteelTarget;
   damage: number;
   bonusGain: number;
   bonusHealth: number;
@@ -36,6 +64,17 @@ export interface HeartsteelRoomState {
   enabled: boolean;
   target: HeartsteelTarget | null;
   lastHit: HeartsteelHit | null;
+}
+
+export function heartsteelSpawnDelayMs(pace: HeartsteelTargetPace, randomByte: number): number {
+  const range = HEARTSTEEL_TARGET_PACE_RANGES_MS[pace] ?? HEARTSTEEL_TARGET_PACE_RANGES_MS.normalSteel;
+  const t = Math.min(255, Math.max(0, Math.round(randomByte)));
+  return range.min + Math.round((t / 255) * (range.max - range.min));
+}
+
+export function heartsteelRuntimeConfigForPace(pace: HeartsteelTargetPace): HeartsteelRuntimeConfig {
+  const preset = HEARTSTEEL_TARGET_PACE_RANGES_MS[pace] ?? HEARTSTEEL_TARGET_PACE_RANGES_MS.normalSteel;
+  return { targetCap: preset.targetCap, targetLifetimeMs: preset.targetLifetimeMs, targetPace: pace };
 }
 
 export function normalizeHeartsteelBonusHealth(raw: unknown): number {

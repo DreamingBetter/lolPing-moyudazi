@@ -1,4 +1,4 @@
-import { Button, Input, Slider, Spinner, Switch } from '@fluentui/react-components';
+import { Button, Input, Radio, RadioGroup, Slider, Spinner, Switch } from '@fluentui/react-components';
 import {
   ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Image24Regular, Person24Regular, PeopleCommunity24Regular,
   Heart24Regular, SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
@@ -61,6 +61,7 @@ function HeartsteelRow({ room, settings: s, update }: { room: RoomState; setting
     <SettingRow icon={<Heart24Regular />} title={(
       <span className="featureLabel">
         {t.heartsteelTitle}
+        <span className="newFeatureBadge">{t.newFeatureBadge}</span>
         <span className="desc inline">{room.heartsteel.enabled ? t.heartsteelToggleOff : t.heartsteelToggle}</span>
       </span>
     )} description={room.phase === 'active' ? t.heartsteelDesc : t.heartsteelSoloDesc}>
@@ -77,6 +78,20 @@ function HeartsteelRow({ room, settings: s, update }: { room: RoomState; setting
           </div>
         ) : null}
       </div>
+    </SettingRow>
+  );
+}
+
+function HeartsteelPaceRow({ settings: s, update }: { settings: Settings; update: Update }) {
+  const t = useText();
+  return (
+    <SettingRow icon={<TopSpeed24Regular />} title={t.heartsteelTargetPace}>
+      <RadioGroup className="heartsteelPaceChoices" layout="horizontal" value={s.heartsteelTargetPace}
+        onChange={(_, d) => void update({ heartsteelTargetPace: d.value as Settings['heartsteelTargetPace'] })}>
+        <Radio value="steelOnce" label={t.heartsteelPaceSteelOnce} />
+        <Radio value="normalSteel" label={t.heartsteelPaceNormalSteel} />
+        <Radio value="funSteel" label={t.heartsteelPaceFunSteel} />
+      </RadioGroup>
     </SettingRow>
   );
 }
@@ -182,6 +197,7 @@ export function RoomSection({ settings: s, update, onOpenChat }: { settings: Set
         </div>
       </SettingRow>
       <HeartsteelRow room={room} settings={s} update={update} />
+      <HeartsteelPaceRow settings={s} update={update} />
       {room.phase === 'idle' ? <RoomJoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} onOpenChat={onOpenChat} />}
       <SwitchRow icon={<SpeakerMute24Regular />} title={t.roomMute} description={t.roomMuteDesc}
         checked={s.roomMuted} onChange={(v) => void update({ roomMuted: v })} />

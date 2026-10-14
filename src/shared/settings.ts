@@ -4,7 +4,11 @@ import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
-import { normalizeHeartsteelBonusHealth } from './heartsteel';
+import {
+  HEARTSTEEL_TARGET_PACES,
+  normalizeHeartsteelBonusHealth,
+  type HeartsteelTargetPace,
+} from './heartsteel';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
@@ -71,6 +75,8 @@ export interface Settings {
   heartsteelWidgetEnabled: boolean;
   /** Last top-left position of the Heartsteel desktop widget, in Electron DIP coordinates. */
   heartsteelWidgetPosition: DesktopWidgetPosition | null;
+  /** Entertainment pacing for new Heartsteel targets. */
+  heartsteelTargetPace: HeartsteelTargetPace;
   allowInternet: boolean;
   rejoinRoom: boolean;
   /** Canonical code of the room to rejoin on launch. */
@@ -139,6 +145,7 @@ export const DEFAULT_SETTINGS: Settings = {
   heartsteelBonusHealth: 0,
   heartsteelWidgetEnabled: false,
   heartsteelWidgetPosition: null,
+  heartsteelTargetPace: 'normalSteel',
   allowInternet: true,
   rejoinRoom: true,
   lastRoomCode: null,
@@ -185,7 +192,9 @@ function num(raw: unknown, key: NumKey): number {
   const { min, max, step } = LIMITS[key];
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_SETTINGS[key];
   const clamped = Math.min(max, Math.max(min, raw));
-  return Number((Math.round(clamped / step) * step).toFixed(step < 1 ? 1 : 0));
+  const decimals = step < 1 ? Math.max(0, `${step}`.split('.')[1]?.length ?? 0) : 0;
+  const factor = 10 ** decimals;
+  return decimals > 0 ? Math.round(clamped * factor) / factor : Math.round(clamped / step) * step;
 }
 
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
@@ -333,6 +342,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     heartsteelBonusHealth: normalizeHeartsteelBonusHealth(r.heartsteelBonusHealth),
     heartsteelWidgetEnabled: bool(r.heartsteelWidgetEnabled, 'heartsteelWidgetEnabled'),
     heartsteelWidgetPosition: widgetPosition(r.heartsteelWidgetPosition),
+    heartsteelTargetPace: enumValue(r.heartsteelTargetPace, HEARTSTEEL_TARGET_PACES, DEFAULT_SETTINGS.heartsteelTargetPace),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),

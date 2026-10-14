@@ -79,4 +79,20 @@ describe('Heartsteel room section layout', () => {
     expect(html).toContain('class="heartsteelSummary"');
     expect(html.slice(membersStart)).not.toContain('heartsteelMember');
   });
+
+  it('marks Heartsteel as new and shows the target pace as a plain row below it', () => {
+    const html = renderRoomSection(activeRoom());
+
+    expect(html).toContain('class="newFeatureBadge"');
+    expect(html).toContain('Target pace');
+    expect(html).toContain('heartsteelPaceChoices');
+    expect(html).toContain('钢一下');
+    expect(html).toContain('正常钢');
+    expect(html).toContain('爽钢');
+    expect(html).not.toContain('aria-label="Heartsteel options"');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('heartsteelOptions');
+    expect(html).not.toContain('Visible targets');
+    expect(html).not.toContain('Target stay time');
+  });
 });

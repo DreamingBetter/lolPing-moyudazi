@@ -1,7 +1,8 @@
-import type { HeartsteelCursorKind } from '../../shared/heartsteel';
+import { HEARTSTEEL_HIT_FEEDBACK_MS, type HeartsteelCursorKind } from '../../shared/heartsteel';
 import { TAG_COLORS } from '../../shared/roomColors';
 
 export const HEARTSTEEL_BONUS_COLOR = '#49d86a';
+export const HEARTSTEEL_DAMAGE_COLOR = '#ff3b3b';
 
 export interface HeartsteelSound {
   play(key: string, volume01: number): void;
@@ -26,9 +27,7 @@ export interface HeartsteelHitView {
 }
 
 export class HeartsteelStage {
-  private target: HTMLElement | null = null;
-  private targetId: string | null = null;
-  private expireTimer: number | null = null;
+  private readonly targets = new Map<string, { el: HTMLElement; timer: number }>();
 
   constructor(
     private readonly root: HTMLElement,
@@ -39,8 +38,7 @@ export class HeartsteelStage {
   ) {}
 
   showTarget(target: HeartsteelTargetView): void {
-    this.clear();
-    this.targetId = target.id;
+    this.clear(target.id);
     const el = document.createElement('button');
     el.type = 'button';
     el.className = `heartsteelTarget ${target.cursor}`;
@@ -49,7 +47,7 @@ export class HeartsteelStage {
     el.setAttribute('aria-label', 'Heartsteel target');
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('mousedown', (e) => {
-      if (e.button !== 2 || this.targetId !== target.id) return;
+      if (e.button !== 2 || !this.targets.has(target.id)) return;
       e.preventDefault();
       this.report(target.id, e.clientX, e.clientY);
     });
@@ -59,17 +57,24 @@ export class HeartsteelStage {
     core.className = 'heartsteelCore';
     el.append(aura, core);
     this.root.append(el);
-    this.target = el;
-    this.expireTimer = window.setTimeout(() => this.clear(target.id), Math.max(0, target.expiresAt - Date.now()));
+    const timer = window.setTimeout(() => this.clear(target.id), Math.max(0, target.expiresAt - Date.now()));
+    this.targets.set(target.id, { el, timer });
   }
 
   clear(id?: string): void {
-    if (id && this.targetId && id !== this.targetId) return;
-    if (this.expireTimer !== null) window.clearTimeout(this.expireTimer);
-    this.expireTimer = null;
-    this.target?.remove();
-    this.target = null;
-    this.targetId = null;
+    if (id) {
+      const target = this.targets.get(id);
+      if (!target) return;
+      window.clearTimeout(target.timer);
+      target.el.remove();
+      this.targets.delete(id);
+      return;
+    }
+    for (const [targetId, target] of this.targets) {
+      window.clearTimeout(target.timer);
+      target.el.remove();
+      this.targets.delete(targetId);
+    }
   }
 
   showHit(hit: HeartsteelHitView): void {
@@ -80,6 +85,7 @@ export class HeartsteelStage {
     el.style.left = `${Math.round(hit.x)}px`;
     el.style.top = `${Math.round(hit.y)}px`;
     el.style.setProperty('--tag-color', TAG_COLORS[hit.winnerColor] ?? TAG_COLORS[0]);
+    el.style.setProperty('--heartsteel-damage-color', HEARTSTEEL_DAMAGE_COLOR);
     el.style.setProperty('--heartsteel-bonus-color', HEARTSTEEL_BONUS_COLOR);
     const damage = document.createElement('b');
     damage.textContent = String(hit.damage);
@@ -90,6 +96,6 @@ export class HeartsteelStage {
     name.textContent = hit.winnerName;
     el.append(damage, bonus, name);
     this.root.append(el);
-    window.setTimeout(() => el.remove(), 1600);
+    window.setTimeout(() => el.remove(), HEARTSTEEL_HIT_FEEDBACK_MS);
   }
 }

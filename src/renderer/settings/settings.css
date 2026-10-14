@@ -118,10 +118,11 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .member:last-of-type { border-bottom: 0; }
 .tagDot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
 .memberName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.heartsteelStack { display: grid; justify-items: end; gap: 8px; min-width: min(300px, 100%); }
+.heartsteelStack { position: relative; display: grid; justify-items: end; gap: 8px; min-width: min(300px, 100%); }
 .heartsteelControls { display: flex; align-items: center; justify-content: flex-end; gap: 14px; flex-wrap: wrap; }
 .heartsteelSummary { width: min(260px, 100%); }
 .heartsteelMember { flex: none; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 178px; }
+.heartsteelPaceChoices { justify-content: flex-end; gap: 4px 10px; flex-wrap: wrap; }
 .heartsteelBar {
   position: relative; flex: 1; height: 16px; min-width: 118px; overflow: hidden; border-radius: 2px;
   background: linear-gradient(#18202b, #080b10); border: 1px solid rgba(199, 164, 88, .52);

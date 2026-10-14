@@ -56,6 +56,12 @@ describe('language', () => {
     const zh = strings('zh-CN');
     expect(en.heartsteelTitle).toBe('Heartsteel');
     expect(en.heartsteelToggle).toContain('Start');
+    expect(en.heartsteelPaceSteelOnce).toBe('钢一下');
+    expect(en.heartsteelPaceNormalSteel).toBe('正常钢');
+    expect(en.heartsteelPaceFunSteel).toBe('爽钢');
+    expect(zh.heartsteelPaceSteelOnce).toBe('钢一下');
+    expect(zh.heartsteelPaceNormalSteel).toBe('正常钢');
+    expect(zh.heartsteelPaceFunSteel).toBe('爽钢');
     expect(zh.heartsteelTitle).toBe('心之钢');
     expect(zh.heartsteelToggle).toContain('开钢');
   });
