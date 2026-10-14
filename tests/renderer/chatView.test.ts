@@ -18,6 +18,8 @@ const member = (peer: string, name: string, color: number): RoomMember => ({
   needsUpdate: false,
   noEmotes: false,
   muted: false,
+  heartsteelBonusHealth: 0,
+  heartsteelMaxHealth: 1000,
   self: false,
 });
 

@@ -22,6 +22,9 @@ const api: OverlayApi = {
   reportAction() {
     // nor desktop actions
   },
+  reportHeartsteelClaim() {
+    // nor Heartsteel claims
+  },
 };
 window.overlay = api;
 
