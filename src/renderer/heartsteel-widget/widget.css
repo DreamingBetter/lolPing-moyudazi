@@ -8,19 +8,24 @@ body { font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; user-selec
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05), 0 10px 24px rgba(0, 0, 0, .32), 0 0 18px rgba(25, 140, 70, .16);
   backdrop-filter: blur(8px);
 }
-.heartsteelIcon {
-  width: 48px; height: 48px; border-radius: 5px; border: 1px solid rgba(245, 213, 125, .78);
-  object-fit: cover; box-shadow: 0 2px 8px rgba(0, 0, 0, .42);
+.heartsteelItem {
+  position: relative; flex: none; width: 48px; height: 48px; display: block; border-radius: 5px;
+  background: #101720; border: 1px solid rgba(245, 213, 125, .78); box-shadow: 0 2px 8px rgba(0, 0, 0, .42);
+}
+.heartsteelItem img {
+  display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 4px;
+}
+.heartsteelItem span {
+  position: absolute; right: -5px; bottom: -5px; min-width: 20px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 8px; background: rgba(6, 10, 16, .94); border: 1px solid rgba(245, 213, 125, .78); color: #f5d57d;
+  text-align: center; font: 800 10px/14px "Segoe UI Variable Text", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 1px #000;
 }
 .heartsteelPanel { min-width: 0; display: grid; gap: 8px; }
-.heartsteelTopline { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.heartsteelTopline { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .heartsteelTopline b {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: 800 13px/16px "Segoe UI Variable Text", "Segoe UI", sans-serif; color: #f4d7aa;
-}
-.heartsteelTopline span {
-  flex: none; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: #f5d57d; font: 800 11px/16px "Segoe UI Variable Text", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums;
 }
 .heartsteelBar {
   position: relative; height: 19px; min-width: 0; overflow: hidden; border-radius: 2px;

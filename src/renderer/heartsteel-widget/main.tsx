@@ -4,7 +4,7 @@ import { resolveLang, strings } from '../../shared/i18n';
 import type { RoomState } from '../../shared/room';
 import type { Settings } from '../../shared/settings';
 import { api } from '../settings/api';
-import { heartsteelFillPercent, heartsteelHealthText, heartsteelStackText, heartsteelTickStyle } from '../settings/heartsteelView';
+import { HeartsteelWidgetContent } from './heartsteelWidgetContent';
 import { heartsteelWidgetMember } from './heartsteelWidgetView';
 import './widget.css';
 
@@ -47,23 +47,7 @@ function HeartsteelWidget() {
     document.documentElement.lang = text.lang;
   }, [text.lang]);
   if (!member) return null;
-  return (
-    <main className="heartsteelWidget" aria-label={text.heartsteelTitle}>
-      <img className="heartsteelIcon" src="../heartsteel/item.png" alt="" />
-      <section className="heartsteelPanel">
-        <div className="heartsteelTopline">
-          <b>{text.heartsteelTitle}</b>
-          <span>{text.heartsteelStacks}: {heartsteelStackText(member.heartsteelBonusHealth)}</span>
-        </div>
-        <div className="heartsteelBar" style={heartsteelTickStyle(member.heartsteelMaxHealth)}
-          aria-label={`${text.heartsteelHealth} ${heartsteelHealthText(member.heartsteelMaxHealth)}`}>
-          <span className="heartsteelBarFill" style={{ width: `${heartsteelFillPercent(member.heartsteelMaxHealth)}%` }} />
-          <span className="heartsteelBarTicks" />
-          <span className="heartsteelBarText">{heartsteelHealthText(member.heartsteelMaxHealth)}</span>
-        </div>
-      </section>
-    </main>
-  );
+  return <HeartsteelWidgetContent member={member} text={text} />;
 }
 
 createRoot(document.getElementById('root')!).render(<HeartsteelWidget />);

@@ -64,12 +64,18 @@ function HeartsteelRow({ room, settings: s, update }: { room: RoomState; setting
         <span className="desc inline">{room.heartsteel.enabled ? t.heartsteelToggleOff : t.heartsteelToggle}</span>
       </span>
     )} description={room.phase === 'active' ? t.heartsteelDesc : t.heartsteelSoloDesc}>
-      <div className="heartsteelControls">
-        {self ? <HeartsteelStats m={self} /> : null}
-        <Switch checked={s.heartsteelWidgetEnabled} onChange={(_, d) => void update({ heartsteelWidgetEnabled: d.checked })}
-          label={t.heartsteelWidgetShow} labelPosition="before" />
-        <Switch checked={room.heartsteel.enabled} onChange={(_, d) => void api.setHeartsteelEnabled(d.checked)}
-          label={room.heartsteel.enabled ? t.on : t.off} labelPosition="before" />
+      <div className="heartsteelStack">
+        <div className="heartsteelControls">
+          <Switch checked={s.heartsteelWidgetEnabled} onChange={(_, d) => void update({ heartsteelWidgetEnabled: d.checked })}
+            label={t.heartsteelWidgetShow} labelPosition="before" />
+          <Switch checked={room.heartsteel.enabled} onChange={(_, d) => void api.setHeartsteelEnabled(d.checked)}
+            label={room.heartsteel.enabled ? t.on : t.off} labelPosition="before" />
+        </div>
+        {self ? (
+          <div className="heartsteelSummary">
+            <HeartsteelStats m={self} />
+          </div>
+        ) : null}
       </div>
     </SettingRow>
   );
@@ -85,7 +91,6 @@ function MemberRow({ m }: { m: RoomMember }) {
         {m.self ? <span className="desc inline">({t.roomYou})</span> : null}
         {m.noEmotes ? <span className="desc">{t.memberOldNoEmotes}</span> : null}
       </span>
-      <HeartsteelStats m={m} />
       {m.self ? null : <span className={`badge ${m.path}`}>{t.roomPath[m.path]}</span>}
       {m.status === 'paused' ? <span className="badge">{t.roomPaused}</span> : null}
       {m.status === 'muted' ? <span className="badge">{t.roomMutedBadge}</span> : null}
