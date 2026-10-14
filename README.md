@@ -26,16 +26,30 @@
 
 Version 0.6.0 adds a configurable desktop action wheel and several social and cosmetic features while preserving the original ping and emote wheels.
 
-- **Action wheel:** hold **Win** and drag to launch screenshots, mute or volume controls, show desktop, lock screen, browser, websites, apps, files and folders. Every slot can be replaced from the built-in library and configured with its own parameters.
+- **Action wheel:** hold **Shift** and drag to launch screenshots, mute or volume controls, show desktop, lock screen, browser, websites, apps, files and folders. Every slot can be replaced from the built-in library and configured with its own parameters.
 - **Room chat:** rooms now have encrypted plain-text chat with a 200-message in-memory history for members joining later.
 - **Message danmaku:** chat messages can appear as a lightweight overlay with adjustable area, speed, size and opacity.
 - **League cursor skins:** apply the bundled modern Summoner cursor or the classic cursor pack to Windows, with automatic restore when disabled.
 - **Heartsteel mode:** play the Heartsteel desktop mini-game solo or with room members, with shared targets, hit results, health growth and a compact desktop status widget.
 - **Windows-first release:** the packaging, release workflow and update source now point to this fork, `DreamingBetter/lolPing-moyudazi`.
 
-<p align="center"><img src="docs/media/settings-0.6.0.png" width="1100" alt="lolPing 0.6.0 Settings window showing the room, Heartsteel and new feature controls"></p>
+### Feature screenshots
 
-<p align="center"><img src="docs/media/features-0.6.0.svg" width="1100" alt="Feature preview for the action wheel, room chat, cursor skins and Heartsteel mode"></p>
+**Action wheel:** edit all eight slots and choose actions from the built-in library.
+
+<p align="center"><img src="docs/media/action-wheel-0.6.0.png" width="920" alt="Action wheel editor and built-in action library"></p>
+
+**Room chat and danmaku:** chat in a room and adjust the desktop message overlay.
+
+<p align="center"><img src="docs/media/chat-danmaku-0.6.0.png" width="920" alt="Room chat and danmaku settings"></p>
+
+**League cursor skins:** switch between system, modern Summoner and classic cursors.
+
+<p align="center"><img src="docs/media/cursor-skins-0.6.0.png" width="700" alt="System, modern Summoner and classic cursor choices"></p>
+
+**Heartsteel:** solo and room play with pacing options and a desktop status widget.
+
+<p align="center"><img src="docs/media/settings-0.6.0.png" width="920" alt="Heartsteel room settings and health display"></p>
 
 ## Use
 
@@ -43,7 +57,7 @@ Version 0.6.0 adds a configurable desktop action wheel and several social and co
 | --- | --- |
 | Ping | Hold **Alt**, drag, release on a slice |
 | Emote | Hold **Ctrl**, drag, release on an emote |
-| Desktop action | Hold **Win**, drag, release on an action |
+| Desktop action | Hold **Shift**, drag, release on an action |
 | Cancel | Release in the centre, right-click or press **Esc** |
 | Pause or resume | **Ctrl + Alt + P** |
 | Open settings | Click the tray icon |
