@@ -1,20 +1,25 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
-#pings, #emotes, #toasts { position: fixed; inset: 0; pointer-events: none; }
+#pings, #emotes, #toasts, #chatDanmaku, #heartsteel { position: fixed; inset: 0; pointer-events: none; }
 
 /* ---------- wheel ---------- */
-#wheel, #emoteWheel {
+#wheel, #emoteWheel, #actionWheel {
   position: absolute; left: 0; top: 0; width: 600px; height: 600px; margin: -300px 0 0 -300px;
   pointer-events: none; opacity: 0; transform: scale(.85); transition: opacity .12s ease-out, transform .12s ease-out;
 }
-#wheel.open, #emoteWheel.open { opacity: 1; transform: scale(1); }
-#wheel .wedge, #emoteWheel .wedge { transition: fill-opacity .08s; }
-#wheel .icon, #emoteWheel .icon {
+#wheel.open, #emoteWheel.open, #actionWheel.open { opacity: 1; transform: scale(1); }
+#wheel .wedge, #emoteWheel .wedge, #actionWheel .wedge { transition: fill-opacity .08s; }
+#wheel .icon, #emoteWheel .icon, #actionWheel .icon {
   transition: filter .1s, transform .1s; transform-box: fill-box; transform-origin: center;
   filter: grayscale(1) sepia(.75) saturate(1.3) brightness(1.15);
 }
-#wheel .icon.hot, #emoteWheel .icon.hot { filter: none; transform: scale(1.18); }
-#wheel .centerTxt, #emoteWheel .centerTxt { font: 600 15px "Segoe UI", sans-serif; letter-spacing: 1px; fill: #1fa9e0; }
-#wheel .backTxt, #emoteWheel .backTxt { font: 600 9px "Segoe UI", sans-serif; fill: #6c7a7c; letter-spacing: .5px; }
+#wheel .icon.hot, #emoteWheel .icon.hot, #actionWheel .icon.hot { filter: none; transform: scale(1.18); }
+#wheel .centerTxt, #emoteWheel .centerTxt, #actionWheel .centerTxt { font: 600 15px "Segoe UI", sans-serif; letter-spacing: 1px; fill: #1fa9e0; }
+#wheel .backTxt, #emoteWheel .backTxt, #actionWheel .backTxt { font: 600 9px "Segoe UI", sans-serif; fill: #6c7a7c; letter-spacing: .5px; }
+#wheel .hint, #emoteWheel .hint, #actionWheel .hint { opacity: 0; transition: opacity .14s ease-out; pointer-events: none; }
+#wheel .hint.show, #emoteWheel .hint.show, #actionWheel .hint.show { opacity: 1; }
+#wheel .hintBox, #emoteWheel .hintBox, #actionWheel .hintBox { fill: rgba(8, 12, 16, .82); stroke: rgba(200, 170, 110, .6); stroke-width: 1; }
+#wheel .hintLabel, #emoteWheel .hintLabel, #actionWheel .hintLabel { fill: #f4e7c1; font: 700 15px "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+#wheel .hintDesc, #emoteWheel .hintDesc, #actionWheel .hintDesc { fill: rgba(255, 255, 255, .75); font: 600 11px "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 /* Emote art is square: draw it round, like the League emote wheel. It keeps its own colours (only ping icons are tinted
    until hovered), so the hot slice shows by its wedge and the larger icon. */
 #emoteWheel .icon, #emoteWheel .hub { clip-path: circle(50%); }
@@ -92,6 +97,79 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 @keyframes emoteIn { 0% { transform: scale(0) } 60% { transform: scale(1.15) } 100% { transform: scale(1) } }
 @keyframes emoteBob { 0%, 100% { translate: 0 0 } 25% { translate: 0 -4px } 75% { translate: 0 4px } }
 @keyframes emoteOut { from { transform: scale(1); opacity: 1 } to { transform: scale(.85); opacity: 0 } }
+
+/* ---------- chat danmaku ---------- */
+#chatDanmaku {
+  overflow: hidden; height: var(--chat-danmaku-area-height, 50vh);
+  contain: layout paint; opacity: var(--chat-danmaku-opacity, .85);
+}
+.chatDanmakuItem {
+  position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: .45em;
+  max-width: none; white-space: nowrap; will-change: transform; pointer-events: none;
+  padding: 3px 10px 4px; border-radius: 4px; background: rgba(6, 10, 16, .52);
+  color: rgba(255, 255, 255, .94); text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+  font: 700 var(--danmaku-size, 24px)/1.35 "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif;
+  animation: chatDanmakuFly var(--danmaku-duration, 8s) linear forwards;
+}
+.chatDanmakuName { color: var(--tag-color, #8ab4ff); }
+.chatDanmakuText { color: inherit; font-weight: 650; }
+@keyframes chatDanmakuFly {
+  from { transform: translate3d(var(--from-x, 100vw), var(--track-y, 0), 0); }
+  to { transform: translate3d(var(--to-x, -100%), var(--track-y, 0), 0); }
+}
+
+/* ---------- heartsteel ---------- */
+.heartsteelTarget {
+  position: absolute; left: 0; top: 0; width: 96px; height: 96px; margin: -48px 0 0 -48px;
+  border: 0; padding: 0; border-radius: 50%; background: transparent; pointer-events: auto;
+  transform: translateZ(0); animation: heartsteelTargetIn .18s ease-out both;
+}
+.heartsteelTarget.system { cursor: pointer; }
+.heartsteelTarget.modern { cursor: url("../cursors/summoner/crosshair.cur") 16 16, crosshair; }
+.heartsteelTarget.classic { cursor: url("../cursors/summoner-classic/text.cur") 8 8, text; }
+.heartsteelAura {
+  position: absolute; inset: 6px; border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(214, 54, 76, .12) 0 20%, rgba(42, 67, 84, .42) 28%, rgba(8, 20, 32, .08) 58%, transparent 72%),
+    conic-gradient(from 20deg, transparent 0 10deg, rgba(184, 213, 224, .65) 18deg 32deg, transparent 42deg 88deg, rgba(93, 126, 143, .55) 100deg 116deg, transparent 130deg 190deg, rgba(208, 225, 232, .48) 206deg 218deg, transparent 236deg 360deg);
+  filter: drop-shadow(0 0 12px rgba(122, 170, 190, .5));
+  animation: heartsteelPulse 1.25s ease-in-out infinite;
+}
+.heartsteelAura::after {
+  content: ''; position: absolute; inset: 18px; border-radius: 50%;
+  border: 2px solid rgba(218, 236, 240, .48); box-shadow: inset 0 0 12px rgba(30, 51, 65, .9), 0 0 16px rgba(196, 42, 58, .42);
+}
+.heartsteelCore {
+  position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #fff7e0 0 9%, #ff6d73 18%, #c71935 54%, #53101a 100%);
+  box-shadow: 0 0 14px #ff2d4d, 0 0 30px rgba(245, 31, 64, .55);
+}
+.heartsteelHit {
+  position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 0;
+  min-width: 96px; transform: translate(-50%, -58px); pointer-events: none;
+  color: #f6dfba; text-shadow: 0 2px 2px #000, 0 0 12px rgba(255, 55, 70, .8);
+  animation: heartsteelHitFloat 1.6s ease-out forwards;
+}
+.heartsteelHit b {
+  color: #f4d7aa; font: 900 34px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  -webkit-text-stroke: 1px rgba(48, 12, 18, .9);
+}
+.heartsteelHit span {
+  color: var(--heartsteel-bonus-color, #49d86a); font: 900 18px/1.1 "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+.heartsteelHit small {
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 2px 7px; border-radius: 4px; background: rgba(8, 12, 16, .72); color: var(--tag-color);
+  font: 700 12px/16px "Segoe UI Variable Text", "Segoe UI", sans-serif; text-shadow: 0 1px 2px #000;
+}
+@keyframes heartsteelTargetIn { from { transform: scale(.68); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+@keyframes heartsteelPulse { 0%, 100% { transform: scale(.96); opacity: .86 } 50% { transform: scale(1.08); opacity: 1 } }
+@keyframes heartsteelHitFloat {
+  0% { transform: translate(-50%, -38px) scale(.78); opacity: 0 }
+  12% { opacity: 1 }
+  70% { opacity: 1 }
+  100% { transform: translate(-50%, -92px) scale(1.04); opacity: 0 }
+}
 
 /* ---------- toast ---------- */
 .toast {

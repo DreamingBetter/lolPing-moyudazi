@@ -1,9 +1,11 @@
 import { app, type BrowserWindow } from 'electron';
 import { join } from 'node:path';
+import { APP_DATA_DIR_NAME } from '../shared/branding';
 import { platformOf, type Platform } from '../shared/platform';
 import { APP_SCHEME } from './appProtocol';
 
-export type Page = 'overlay' | 'settings';
+export type Page = 'overlay' | 'settings' | 'heartsteel-widget';
+export type PreloadPage = 'overlay' | 'settings';
 
 export const PLATFORM: Platform = platformOf(process.platform);
 export const IS_MAC = PLATFORM === 'mac';
@@ -19,13 +21,13 @@ export const helperExePath = (): string =>
 export const buildResourcePath = (file: string): string =>
   app.isPackaged ? join(process.resourcesPath, file) : join(app.getAppPath(), 'build', file);
 
-export const preloadPath = (name: Page): string => join(__dirname, '../preload', `${name}.js`);
+export const preloadPath = (name: PreloadPage): string => join(__dirname, '../preload', `${name}.js`);
 
 /** Files from assets/ (in production they are copied into out/renderer by Vite's publicDir). */
 export const assetPath = (...parts: string[]): string =>
   app.isPackaged ? join(__dirname, '../renderer', ...parts) : join(app.getAppPath(), 'assets', ...parts);
 
-export const settingsDir = (): string => join(app.getPath('appData'), 'lolPing');
+export const settingsDir = (): string => join(app.getPath('appData'), APP_DATA_DIR_NAME);
 
 /** Where `page` is served from: the Vite dev server in development, lolping://app in production. `hash` is without the #. */
 export function pageUrl(page: Page, hash = ''): string {

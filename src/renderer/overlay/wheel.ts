@@ -24,7 +24,15 @@ function sector(r0: number, r1: number, a0: number, a1: number): string {
 export interface WheelItem {
   key: string;
   icon: string;
+  label?: string;
+  description?: string;
 }
+
+interface WheelOptions {
+  hintDelayMs?: number;
+}
+
+const DEFAULT_HINT_DELAY_MS = 1200;
 
 /**
  * The League-style wheel (see prototype/wheel-demo.html), for pings or emotes: the slices are whatever items it is given.
@@ -33,6 +41,10 @@ export interface WheelItem {
 export class Wheel {
   private readonly wedges: SVGPathElement[] = [];
   private readonly icons: SVGImageElement[] = [];
+  private hint: SVGGElement | null = null;
+  private hintLabel: SVGTextElement | null = null;
+  private hintDesc: SVGTextElement | null = null;
+  private hintTimer: ReturnType<typeof setTimeout> | null = null;
   private items: readonly WheelItem[] = [];
   private hot = -1;
   private ox = 0;
@@ -44,6 +56,7 @@ export class Wheel {
     private readonly centerLabel: string,
     private readonly centerIcon: string,
     private readonly onHover: (slice: number) => void,
+    private readonly options: WheelOptions = {},
   ) {
     this.build();
   }
@@ -67,6 +80,7 @@ export class Wheel {
     this.oy = y;
     this.svg.style.left = `${x}px`;
     this.svg.style.top = `${y}px`;
+    this.resetHint();
     this.setHot(-1);
     this.opened = true;
     this.svg.classList.add('open');
@@ -93,10 +107,12 @@ export class Wheel {
     this.opened = false;
     this.svg.classList.remove('open');
     this.setHot(-1);
+    this.resetHint();
   }
 
   private setHot(i: number): void {
     if (i === this.hot) return;
+    this.resetHint();
     if (this.hot >= 0) {
       this.wedges[this.hot].setAttribute('fill-opacity', '0');
       this.icons[this.hot].classList.remove('hot');
@@ -106,7 +122,30 @@ export class Wheel {
       this.wedges[i].setAttribute('fill-opacity', '0.55');
       this.icons[i].classList.add('hot');
       if (this.opened) this.onHover(i);
+      this.queueHint(i);
     }
+  }
+
+  private queueHint(i: number): void {
+    const delay = this.options.hintDelayMs ?? DEFAULT_HINT_DELAY_MS;
+    this.hintTimer = setTimeout(() => {
+      if (this.opened && this.hot === i) this.showHint(this.items[i]);
+    }, delay);
+  }
+
+  private resetHint(): void {
+    if (this.hintTimer !== null) {
+      clearTimeout(this.hintTimer);
+      this.hintTimer = null;
+    }
+    this.hint?.classList.remove('show');
+  }
+
+  private showHint(item: WheelItem | undefined): void {
+    if (!item || (!item.label && !item.description) || !this.hintLabel || !this.hintDesc || !this.hint) return;
+    this.hintLabel.textContent = fitText(item.label ?? '', 24);
+    this.hintDesc.textContent = fitText(item.description ?? '', 42);
+    this.hint.classList.add('show');
   }
 
   private build(): void {
@@ -152,5 +191,16 @@ export class Wheel {
     const mouse = el('g', { opacity: 0.55, transform: 'translate(-26,40)' }, svg);
     el('rect', { x: 0, y: 0, width: 11, height: 16, rx: 5.5, fill: 'none', stroke: '#6c7a7c', 'stroke-width': 1.3 }, mouse);
     el('path', { d: 'M5.5,0 V7 H11 V5.5 A5.5,5.5 0 0 0 5.5,0Z', fill: '#6c7a7c' }, mouse);
+
+    const hint = el('g', { class: 'hint' }, svg);
+    el('rect', { x: -156, y: 205, width: 312, height: 54, rx: 6, class: 'hintBox' }, hint);
+    this.hintLabel = el('text', { x: 0, y: 227, 'text-anchor': 'middle', class: 'hintLabel' }, hint);
+    this.hintDesc = el('text', { x: 0, y: 246, 'text-anchor': 'middle', class: 'hintDesc' }, hint);
+    this.hint = hint;
   }
+}
+
+function fitText(s: string, max: number): string {
+  const chars = Array.from(s);
+  return chars.length > max ? `${chars.slice(0, max - 3).join('')}...` : s;
 }

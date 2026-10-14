@@ -1,19 +1,24 @@
 import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { spawn } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
+import type { HeartsteelCursorKind } from '../shared/heartsteel';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
-import { announcedEmoteHashes } from '../shared/emotes';
 import { hotkeyLabel } from '../shared/keys';
+import { announcedEmoteHashes } from '../shared/emotes';
 import { configCommand, type HelperStatus } from '../shared/protocol';
-import type { RoomState } from '../shared/room';
+import type { JoinResult, RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
+import { WINDOWS_APP_ID } from '../shared/branding';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
+import { executeAction } from './actionExecutor';
 import { resolveTarget, toShared } from './displayNumbers';
+import { createCursorSkinService } from './cursorSkin';
 import { EmoteCache } from './emoteCache';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
 import { EmoteTransfer } from './emoteTransfer';
@@ -22,7 +27,8 @@ import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
-import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
+import { OverlayManager, type SelectedAction, type SharedEmote, type SharedPing } from './overlayManager';
+import { HeartsteelWidgetWindow } from './heartsteelWidgetWindow';
 import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
@@ -38,7 +44,7 @@ import { Updater } from './updater';
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
 
 registerAppScheme();
-app.setAppUserModelId('com.lolping.app');
+app.setAppUserModelId(WINDOWS_APP_ID);
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -67,6 +73,12 @@ function relayUrls(): readonly string[] {
   return urls.length > 0 ? urls : RELAYS;
 }
 
+const runDetached = (command: string, args: string[]): Promise<void> => new Promise((resolve, reject) => {
+  const child = spawn(command, args, { windowsHide: true, detached: false, stdio: 'ignore' });
+  child.once('error', reject);
+  child.once('spawn', resolve);
+});
+
 /** macOS: the app, Edit and Window menus, so Cmd+Q, Cmd+W and the clipboard shortcuts work in the settings window. */
 function setMacMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]));
@@ -78,7 +90,7 @@ function start(): void {
   void cache.present();
   serveAppScheme({
     rendererRoot: process.env.ELECTRON_RENDERER_URL ? null : join(__dirname, '../renderer'), // development pages come from Vite
-    emoteDirs: () => [library.dir, cache.dir], // the library wins; the cache only fills the gaps
+    emoteDirs: () => [library.dir, cache.dir],
   });
   if (IS_MAC) {
     app.dock?.hide(); // a menu bar app: the Dock icon only shows while settings are open
@@ -86,6 +98,14 @@ function start(): void {
   }
   const store = new SettingsStore(settingsDir(), undefined, PLATFORM, { name: osUserName(), color: randomInt(8) });
   let settings = store.load();
+  const cursorSkin = IS_MAC ? undefined : createCursorSkinService({
+    platform: PLATFORM,
+    sourceDir: assetPath('cursors', 'summoner'),
+    classicSourceDir: assetPath('cursors', 'summoner-classic'),
+    installDir: join(settingsDir(), 'cursors', 'summoner'),
+    classicInstallDir: join(settingsDir(), 'cursors', 'summoner-classic'),
+    backupFile: join(settingsDir(), 'cursor-backup.json'),
+  });
   // An imported emote whose still is gone is dropped; normalising the shorter list repairs the wheel slots that used it.
   const kept = library.present(settings.customEmotes);
   if (kept.length !== settings.customEmotes.length) settings = store.update({ customEmotes: kept });
@@ -97,12 +117,11 @@ function start(): void {
 
   const overlays = new OverlayManager(
     overlaySettings(settings),
-    (ref, remote) =>
-      resolveEmoteArt(ref, settings.customEmotes, remote, (hash) => {
-        if (!settings.friendEmotes || !cache.has(hash)) return false; // off: friends' images show as the placeholder
-        cache.touch(hash); // a shown still is the most recently used at the next cache sweep
-        return true;
-      }),
+    (ref, remote) => resolveEmoteArt(ref, settings.customEmotes, remote, (hash) => {
+      if (!settings.friendEmotes || !cache.has(hash)) return false;
+      cache.touch(hash);
+      return true;
+    }),
   );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
@@ -151,24 +170,25 @@ function start(): void {
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
     appVersion: app.getVersion(),
-    profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit }),
+    profile: () => ({
+      name: settings.displayName,
+      color: settings.tagColor,
+      limit: settings.incomingPingLimit,
+      heartsteelBonusHealth: settings.heartsteelBonusHealth,
+    }),
+    displayNumbers: () => overlays.numbered().map((d) => d.number),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
     },
     announceEmotes: () => announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId),
   });
-  // Custom emote stills travel both ways: this side asks for friends' hashes and answers wants for our own.
   const transfer = new EmoteTransfer({
     now: Date.now,
     enabled: () => settings.friendEmotes,
     have: (hash) => isFile(join(library.dir, `${hash}.webp`), false) || cache.has(hash),
     still: (hash) => {
-      try {
-        return new Uint8Array(readFileSync(join(library.dir, `${hash}.webp`)));
-      } catch {
-        return null;
-      }
+      try { return new Uint8Array(readFileSync(join(library.dir, `${hash}.webp`))); } catch { return null; }
     },
     announced: () => announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId),
     put: (hash, bytes) => void cache.put(hash, bytes),
@@ -178,8 +198,8 @@ function start(): void {
     spareSharedToken: (keep) => room.spareSharedToken(keep),
   });
   room.on('emotes', (peer: string, hashes: string[]) => transfer.announced(peer, hashes));
-  room.on('want', (w: Parameters<EmoteTransfer['onWant']>[0]) => transfer.onWant(w));
-  room.on('chunk', (c: Parameters<EmoteTransfer['onChunk']>[0]) => transfer.onChunk(c));
+  room.on('want', (want) => transfer.onWant(want));
+  room.on('chunk', (chunk) => transfer.onChunk(chunk));
   room.on('memberGone', (peer: string) => transfer.memberGone(peer));
   const roomState = (): RoomState => {
     const all = screen.getAllDisplays();
@@ -191,6 +211,9 @@ function start(): void {
       }),
     };
   };
+  const heartsteelWidget = new HeartsteelWidgetWindow((heartsteelWidgetPosition) => {
+    store.update({ heartsteelWidgetPosition });
+  });
   const clipboardCode = async (): Promise<string | null> => {
     // Strict: nobody typed this, so only an unmistakable code counts, never words that happen to pass the check.
     const parsed = parseRoomCode(await clipboard.readText().catch(() => ''), { strict: true });
@@ -199,6 +222,18 @@ function start(): void {
   const copyRoomCode = (): void => {
     const code = room.state().code;
     if (code) void clipboard.writeText(code).catch(() => undefined);
+  };
+  const showChat = (): void => {
+    openSettingsWindow('chat');
+  };
+  const createRoom = async (): Promise<void> => {
+    await room.create();
+    showChat();
+  };
+  const joinRoom = async (text: string): Promise<JoinResult> => {
+    const result = await room.join(text);
+    if (result.ok) showChat();
+    return result;
   };
 
   // macOS Accessibility. Without it the helper can't create its event tap, so it isn't started: a timer waits for
@@ -244,11 +279,11 @@ function start(): void {
       room: {
         joinClipboard: () => {
           void clipboardCode().then((code) => {
-            if (code) void room.join(code);
+            if (code) void joinRoom(code);
             else overlays.toast(text().toastNoCode, text().toastNoCodeBody);
           });
         },
-        create: () => void room.create(),
+        create: () => void createRoom(),
         copyCode: copyRoomCode,
         setMuted: (on) => store.update({ roomMuted: on }),
         leave: () => room.leave(),
@@ -282,10 +317,51 @@ function start(): void {
     if (quitting) return;
     const s = roomState();
     tray.setRoom({ code: s.code, count: s.members.length, muted: settings.roomMuted });
-    settingsWindow()?.webContents.send(SETTINGS_CH.roomChanged, s);
+    sendToSettings(SETTINGS_CH.roomChanged, s);
+    heartsteelWidget.setRoom(s);
+  }
+  function pushChat(): void {
+    if (quitting) return;
+    sendToSettings(SETTINGS_CH.roomChatChanged, room.chatState());
   }
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
   room.on('state', pushRoom);
+  room.on('chatState', pushChat);
+  room.on('chatMessage', (m) => overlays.spawnChatDanmaku(m));
+  room.on('heartsteelBonusHealth', (heartsteelBonusHealth: number) => {
+    store.update({ heartsteelBonusHealth });
+  });
+  const heartsteelCursor = (): HeartsteelCursorKind =>
+    settings.cursorSkinEnabled ? (settings.cursorSkinClassic ? 'classic' : 'modern') : 'system';
+  room.on('heartsteelTarget', (target) => {
+    const display = resolveTarget(overlays.numbered(), target.d);
+    if (!display) return;
+    overlays.showHeartsteelTarget({
+      displayId: display.id,
+      id: target.id,
+      x: target.x * display.bounds.width,
+      y: target.y * display.bounds.height,
+      expiresAt: target.expiresAt,
+      cursor: heartsteelCursor(),
+    });
+  });
+  room.on('heartsteelClear', (target: { id: string } | null) => overlays.clearHeartsteelTarget(target?.id));
+  room.on('heartsteelHit', (hit) => {
+    const target = room.state().heartsteel.target;
+    if (!target) return;
+    const display = resolveTarget(overlays.numbered(), target.d);
+    if (!display) return;
+    overlays.showHeartsteelHit({
+      displayId: display.id,
+      id: hit.id,
+      x: target.x * display.bounds.width,
+      y: target.y * display.bounds.height,
+      winnerName: hit.winnerName,
+      winnerColor: hit.winnerColor,
+      damage: hit.damage,
+      bonusGain: hit.bonusGain,
+    });
+  });
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
   overlays.on('shared', (p: SharedPing) => {
@@ -297,6 +373,34 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
   });
+  overlays.on('action', (p: SelectedAction) => {
+    const slot = settings.actionWheel.find((a) => a.id === p.id);
+    if (!slot) {
+      overlays.toast(text().actionFailed, text().actionMissing);
+      return;
+    }
+    void executeAction(slot, {
+      platform: PLATFORM,
+      openExternal: (url) => shell.openExternal(url),
+      openPath: (path) => shell.openPath(path),
+      run: runDetached,
+      injectKeys: (keys) => bridge.injectKeys(keys),
+      exists: existsSync,
+    }).then((result) => {
+      if (result.ok) return;
+      const t = text();
+      const body = result.reason === 'missingConfig' ? t.actionMissingConfig
+        : result.reason === 'invalidUrl' ? t.actionInvalidUrl
+          : result.reason === 'pathMissing' ? t.actionPathMissing
+            : result.reason === 'unsupported' ? t.actionUnsupported
+              : result.message || t.actionOpenFailed;
+      overlays.toast(t.actionFailed, body);
+    }).catch((err: Error) => {
+      console.warn('[action]', err);
+      overlays.toast(text().actionFailed, text().actionOpenFailed);
+    });
+  });
+  overlays.on('heartsteelClaim', (p: { id: string }) => room.claimHeartsteelTarget(p.id));
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
     const t = text();
@@ -322,6 +426,7 @@ function start(): void {
     problems: [
       ...store.problems,
       ...(store.emoteKeyClashed ? [text().problemEmoteKeyClash] : []),
+      ...(store.actionKeyClashed ? [text().problemActionKeyClash] : []),
       ...[...overlays.missingAssets].map((a) => text().missingAsset(a)),
     ],
     limitations: text().limitations,
@@ -364,9 +469,14 @@ function start(): void {
     settings = s;
     bridge.send(configCommand(s, enabled));
     overlays.updateSettings(overlaySettings(s));
+    heartsteelWidget.setSettings(s);
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
-    if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor) room.profileChanged();
+    if (
+      s.displayName !== previous.displayName
+      || s.tagColor !== previous.tagColor
+      || s.heartsteelBonusHealth !== previous.heartsteelBonusHealth
+    ) room.profileChanged();
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
       syncRoomFlags();
@@ -402,6 +512,7 @@ function start(): void {
     },
     text,
     platform: PLATFORM,
+    cursorSkin,
     update: updater
       ? { state: () => updater.state, notesUrl: () => updater.notesUrl, check: () => updater.check(true), start: () => updater.startUpdate() }
       : undefined,
@@ -411,9 +522,16 @@ function start(): void {
       join: (t) => room.join(t),
       leave: () => room.leave(),
       mute: (peer, on) => room.muteMember(peer, on),
+      setHeartsteelEnabled: (on) => room.setHeartsteelEnabled(on),
       clipboardCode,
       copyCode: copyRoomCode,
       retryInternet: () => relay.retryNow(),
+      chatState: () => room.chatState(),
+      sendChat: (text) => room.sendChat(text),
+      retryChat: (id) => room.retryChat(id),
+    },
+    showSection: (section) => {
+      openSettingsWindow(section);
     },
   });
   // The page can't report that it went away mid-capture (window closed, renderer crashed): release the suspend here.
@@ -424,12 +542,14 @@ function start(): void {
   });
 
   bridge.send(configCommand(settings, enabled));
+  heartsteelWidget.setSettings(settings);
   if (trusted()) bridge.start();
   else waitForAccess();
   pushStatus();
   syncRoomFlags();
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
+  pushChat();
   if (settings.rejoinRoom && settings.lastRoomCode) void room.join(settings.lastRoomCode);
   if (IS_MAC) {
     // A menu bar app: open settings only when there is something to do, otherwise point at the menu bar icon.
@@ -454,6 +574,7 @@ function start(): void {
     stopWaitingForAccess();
     tray.destroy();
     overlays.destroy();
+    heartsteelWidget.destroy();
     void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed()]).then(() => app.exit(0));
   });
 }

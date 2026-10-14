@@ -1,4 +1,5 @@
 import type { MemberStatus } from './roomProtocol';
+import type { HeartsteelRoomState } from './heartsteel';
 
 export type TransportStatus = 'off' | 'starting' | 'ok' | 'unavailable';
 export type MemberPath = 'lan' | 'internet' | 'connecting' | 'unreachable';
@@ -15,6 +16,8 @@ export interface RoomMember {
   noEmotes: boolean;
   /** Muted by us, for this session. */
   muted: boolean;
+  heartsteelBonusHealth: number;
+  heartsteelMaxHealth: number;
   self: boolean;
 }
 
@@ -24,6 +27,7 @@ export interface RoomStateCore {
   code: string | null;
   /** Us first, then everyone else in the order they appeared. */
   members: RoomMember[];
+  heartsteel: HeartsteelRoomState;
   lan: TransportStatus;
   internet: TransportStatus;
   /** In a room and alone for 20 s: the code may be wrong. */

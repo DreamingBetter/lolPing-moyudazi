@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_ACTION_WHEEL, type ActionSlot } from '../../src/shared/actions';
+import { strings } from '../../src/shared/i18n';
+import { actionLibraryItems, actionWheelItems } from '../../src/renderer/settings/actionItems';
+
+describe('action editor items', () => {
+  it('keeps the built-in library unique while exposing wheel slots separately', () => {
+    const t = strings('en');
+    const library = actionLibraryItems(t);
+    const wheel = actionWheelItems(DEFAULT_ACTION_WHEEL, t);
+
+    expect(library).toHaveLength(11);
+    expect(new Set(library.map((item) => item.id)).size).toBe(library.length);
+    expect(library.every((item) => item.id.startsWith('template:'))).toBe(true);
+    expect(wheel).toHaveLength(8);
+    expect(wheel.map((item) => item.id)).toEqual(DEFAULT_ACTION_WHEEL.map((slot) => slot.id));
+  });
+
+  it('localizes built-in labels but preserves a custom slot label', () => {
+    const custom: ActionSlot = { ...DEFAULT_ACTION_WHEEL[0], id: 'custom-shot', label: 'Work capture' };
+    const t = strings('zh-CN');
+    const [builtIn, customItem] = actionWheelItems([DEFAULT_ACTION_WHEEL[0], custom], t);
+
+    expect(builtIn.name).toBe(t.actionNames.screenshot);
+    expect(customItem.name).toBe('Work capture');
+  });
+
+  it('uses a generated slot icon before the built-in action icon', () => {
+    const iconUrl = 'data:image/png;base64,aWNvbg==';
+    const t = strings('en');
+    const [item] = actionWheelItems([{
+      id: 'docs',
+      kind: 'openUrl',
+      label: 'Docs',
+      icon: 'web',
+      params: { url: 'https://example.com', iconUrl },
+    }], t);
+
+    expect(item.icon).toBe(iconUrl);
+  });
+
+  it('shows configured volume actions by their actual volume delta', () => {
+    const t = strings('zh-CN');
+    const items = actionWheelItems([
+      { id: 'up', kind: 'volumeUp', label: 'Volume up', icon: 'volume-up', params: { volumeStep: 6 } },
+      { id: 'down', kind: 'volumeDown', label: 'Volume down', icon: 'volume-down', params: { volumeStep: 4 } },
+    ], t);
+
+    expect(items.map((item) => item.name)).toEqual(['音量+6', '音量-4']);
+  });
+});

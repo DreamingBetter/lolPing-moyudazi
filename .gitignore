@@ -14,3 +14,6 @@ tools/extract-assets/__pycache__/
 .superpowers/
 docs/superpowers/
 docs/fix/
+
+.idea/
+*.zip

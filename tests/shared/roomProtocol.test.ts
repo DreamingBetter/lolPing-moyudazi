@@ -1,18 +1,64 @@
 import { describe, expect, it } from 'vitest';
 import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeName, validateMessage, type ChunkMsg, type EmoteMsg,
-  type PingMsg, type PresenceMsg, type RoomMessage, type WantMsg,
+  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeChatText, sanitizeName, validateMessage, type ChatHistoryMsg,
+  type ChatHistoryRequestMsg, type ChatMsg, type EmoteMsg, type HeartsteelClaimMsg, type HeartsteelHitMsg,
+  type HeartsteelStateMsg, type HeartsteelTargetMsg, type PingMsg, type PresenceMsg, type RoomMessage,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
-const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on', em: [] };
+const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on' };
 const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 };
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
+const chat: ChatMsg = { ...base, t: 'chat', id: '0123456789abcdef0123456789abcdef', text: 'hello\nworld' };
+const historyRequest: ChatHistoryRequestMsg = {
+  ...base, t: 'chatHistoryRequest', request: 'fedcba9876543210fedcba9876543210',
+};
+const history: ChatHistoryMsg = {
+  ...base,
+  t: 'chatHistory',
+  request: historyRequest.request,
+  part: 0,
+  total: 1,
+  messages: [{ id: chat.id, peer: base.peer, ts: base.ts, name: 'Alex', color: 3, text: 'hello' }],
+};
+const heartsteelState: HeartsteelStateMsg = { ...base, t: 'heartsteelState', enabled: true };
+const heartsteelTarget: HeartsteelTargetMsg = {
+  ...base,
+  t: 'heartsteelTarget',
+  id: '11111111111111111111111111111111',
+  d: 1,
+  x: 0.25,
+  y: 0.75,
+  createdAt: base.ts,
+  expiresAt: base.ts + 2400,
+};
+const heartsteelClaim: HeartsteelClaimMsg = { ...base, t: 'heartsteelClaim', id: heartsteelTarget.id };
+const heartsteelHit: HeartsteelHitMsg = {
+  ...base,
+  t: 'heartsteelHit',
+  id: heartsteelTarget.id,
+  winner: base.peer,
+  damage: 245,
+  bonusGain: 25,
+  bonusHealth: 25,
+};
 
 describe('encode / decode', () => {
-  it.each<RoomMessage>([presence, ping, { ...base, t: 'bye' }])('round-trips $t', (m) => {
+  it.each<RoomMessage>([
+    presence,
+    ping,
+    emote,
+    chat,
+    historyRequest,
+    history,
+    heartsteelState,
+    heartsteelTarget,
+    heartsteelClaim,
+    heartsteelHit,
+    { ...base, t: 'bye' },
+  ])('round-trips $t', (m) => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });
 
@@ -80,6 +126,70 @@ describe('validateMessage', () => {
   });
 });
 
+describe('chat messages', () => {
+  it('sanitises valid multiline chat text and keeps known fields only', () => {
+    expect(validateMessage({ ...chat, text: '  hello\r\nworld\rbye  ', extra: 'ignored' })).toEqual({
+      ...chat,
+      text: 'hello\nworld\nbye',
+    });
+  });
+
+  it.each([
+    ['invalid id', { ...chat, id: 'ABC' }],
+    ['invalid request id', { ...historyRequest, request: 'not-an-id' }],
+    ['empty text', { ...chat, text: ' \n\t ' }],
+    ['too long', { ...chat, text: 'x'.repeat(1001) }],
+    ['negative part', { ...history, part: -1 }],
+    ['part after total', { ...history, part: 1, total: 1 }],
+    ['zero total', { ...history, total: 0 }],
+    ['too many parts', { ...history, total: 257 }],
+    ['too many history items', {
+      ...history,
+      messages: Array.from({ length: 51 }, (_, i) => ({ ...history.messages[0], id: i.toString(16).padStart(32, '0') })),
+    }],
+    ['invalid history item id', { ...history, messages: [{ ...history.messages[0], id: 'bad' }] }],
+    ['invalid history item peer', { ...history, messages: [{ ...history.messages[0], peer: 'bad' }] }],
+    ['invalid history item timestamp', { ...history, messages: [{ ...history.messages[0], ts: -1 }] }],
+    ['invalid history item name', { ...history, messages: [{ ...history.messages[0], name: 3 }] }],
+    ['invalid history item colour', { ...history, messages: [{ ...history.messages[0], color: 99 }] }],
+    ['invalid history item text', { ...history, messages: [{ ...history.messages[0], text: ' ' }] }],
+  ])('rejects %s', (label, raw) => {
+    if (label.startsWith('invalid history item')) {
+      expect(validateMessage(raw)).toMatchObject({ t: 'chatHistory', messages: [] });
+    } else {
+      expect(validateMessage(raw)).toBeNull();
+    }
+  });
+
+  it('drops dangerous chat characters and normalises line endings', () => {
+    expect(sanitizeChatText('\u0000A\u0085\u200b\u200e\u202aB\u2028C\u2029D\r\nE\rF')).toBe('ABCD\nE\nF');
+  });
+});
+
+describe('heartsteel messages', () => {
+  it('accepts optional Heartsteel bonus health on presence', () => {
+    expect(validateMessage({ ...presence, heartsteelBonusHealth: 42 })).toEqual({ ...presence, heartsteelBonusHealth: 42 });
+    expect(validateMessage({ ...presence, heartsteelBonusHealth: -1 })).toEqual(presence);
+    expect(validateMessage({ ...presence, heartsteelBonusHealth: '42' })).toEqual(presence);
+  });
+
+  it.each([
+    ['state enabled not boolean', { ...heartsteelState, enabled: 'yes' }],
+    ['target invalid id', { ...heartsteelTarget, id: 'bad' }],
+    ['target display 0', { ...heartsteelTarget, d: 0 }],
+    ['target x outside unit', { ...heartsteelTarget, x: 1.1 }],
+    ['target expires before create', { ...heartsteelTarget, expiresAt: heartsteelTarget.createdAt }],
+    ['claim invalid id', { ...heartsteelClaim, id: 'bad' }],
+    ['hit winner invalid', { ...heartsteelHit, winner: 'bad' }],
+    ['hit negative damage', { ...heartsteelHit, damage: -1 }],
+    ['hit negative bonus', { ...heartsteelHit, bonusGain: -1 }],
+    ['hit negative bonus health', { ...heartsteelHit, bonusHealth: -1 }],
+    ['hit math mismatch', { ...heartsteelHit, damage: 999 }],
+  ])('rejects %s', (_label, raw) => {
+    expect(validateMessage(raw)).toBeNull();
+  });
+});
+
 describe('emote messages', () => {
   it('validates a bundled and a custom emote, and round-trips them', () => {
     for (const e of ['gg', CUSTOM_REF]) {
@@ -114,78 +224,6 @@ describe('emote messages', () => {
 
   it('keeps known fields only', () => {
     expect(validateMessage({ ...emote, extra: 'ignored', ping: 'danger' })).toEqual(emote);
-  });
-});
-
-describe('presence announcements (em)', () => {
-  const hash = '0123456789abcdef0123456789abcdef';
-  const hash2 = 'fedcba9876543210fedcba9876543210';
-
-  it('round-trips the announced hashes', () => {
-    const m: PresenceMsg = { ...presence, em: [hash, hash2] };
-    expect(decodeMessage(encodeMessage(m))).toEqual(m);
-  });
-
-  it('reads a presence without em as announcing nothing (an app before 0.6.0)', () => {
-    expect(validateMessage({ t: 'presence', peer: presence.peer, seq: 1, ts: 1, proto: 1, app: '0.5.1', name: 'A', color: 0, status: 'on' }))
-      .toMatchObject({ em: [] });
-  });
-
-  it('rebuilds the list: malformed entries dropped, duplicates kept once, at most 9', () => {
-    const raw = { ...presence, em: [hash, hash, 'XYZ', 7, hash2, `${hash}0`] };
-    expect(validateMessage(raw)).toMatchObject({ em: [hash, hash2] });
-    expect(validateMessage({ ...presence, em: Array.from({ length: 20 }, () => hash) })).toMatchObject({ em: [hash] });
-    const many = [hash, hash2, ...Array.from({ length: 20 }, (_, i) => i.toString(16).padStart(32, '0'))];
-    expect(validateMessage({ ...presence, em: many })).toMatchObject({ em: many.slice(0, 9) });
-  });
-
-  it.each([
-    ['em not an array', { ...presence, em: hash }],
-    ['em entry not a string', { ...presence, em: [7] }],
-    ['em entry upper-case', { ...presence, em: [hash.toUpperCase()] }],
-    ['em entry short', { ...presence, em: ['0123'] }],
-  ])('reads %s as announcing nothing', (_label, raw) => {
-    expect(validateMessage(raw)).toMatchObject({ em: [] });
-  });
-});
-
-describe('want and chunk messages', () => {
-  const hash = '0123456789abcdef0123456789abcdef';
-  const want: WantMsg = { ...base, t: 'want', to: 'fedcba9876543210', h: hash, need: [0, 2] };
-  const chunk: ChunkMsg = { ...base, t: 'chunk', h: hash, i: 0, n: 17, b: Buffer.from('x'.repeat(750)).toString('base64') };
-
-  it('round-trips a want and a chunk', () => {
-    expect(decodeMessage(encodeMessage(want))).toEqual(want);
-    expect(decodeMessage(encodeMessage(chunk))).toEqual(chunk);
-  });
-
-  it('deduplicates a want’s need list', () => {
-    expect(validateMessage({ ...want, need: [2, 2, 0, 2] })).toMatchObject({ need: [2, 0] });
-  });
-
-  it.each([
-    ['to that is not a peer id', { ...want, to: 'nope' }],
-    ['to shaped like a hash', { ...want, to: hash }],
-    ['hash upper-case', { ...want, h: hash.toUpperCase() }],
-    ['need not an array', { ...want, need: 0 }],
-    ['need over 64 entries', { ...want, need: Array(65).fill(0) }],
-    ['need index at the chunk max', { ...want, need: [17] }],
-    ['need index negative', { ...want, need: [-1] }],
-    ['chunk count 0', { ...chunk, n: 0 }],
-    ['chunk count 18', { ...chunk, n: 18 }],
-    ['index at the count', { ...chunk, i: 17 }],
-    ['index above the count', { ...chunk, n: 3, i: 3 }],
-    ['base64 over 1000 characters', { ...chunk, b: 'QQ'.repeat(501) }],
-    ['base64 of a ragged length', { ...chunk, b: 'QQQ' }],
-    ['base64 with a stray character', { ...chunk, b: `${'A'.repeat(999)}*` }],
-    ['base64 not a string', { ...chunk, b: 9 }],
-  ])('rejects %s', (_label, raw) => {
-    expect(validateMessage(raw)).toBeNull();
-  });
-
-  it('accepts an empty need (all of it) and a full-size chunk', () => {
-    expect(validateMessage({ ...want, need: [] })).toMatchObject({ need: [] });
-    expect(validateMessage(chunk)).toEqual(chunk);
   });
 });
 

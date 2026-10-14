@@ -19,7 +19,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-const INFO: UpdateInfo = { version: '0.5.1', notesUrl: 'https://github.com/darrenprx/lolPing/releases/tag/v0.5.1' };
+const INFO: UpdateInfo = { version: '0.5.1', notesUrl: 'https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.5.1' };
 
 /** The parts of electron-updater's AppUpdater that WinBackend uses. */
 class FakeUpdater extends EventEmitter {
@@ -189,7 +189,7 @@ describe('WinBackend.download', () => {
     fake.emit('download-progress', { percent: 99.9 });
     fake.emit('download-progress', { percent: 100 });
     expect(progress).toEqual([42, 99, 100]);
-    fake.downloads[0].done.resolve(['C:\\cache\\lolPing-Setup-0.5.1.exe']);
+    fake.downloads[0].done.resolve(['C:\\cache\\lolPing-moyudazi-Setup-0.5.1.exe']);
     await expect(p).resolves.toBeUndefined();
   });
 

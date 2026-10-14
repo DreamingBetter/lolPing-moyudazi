@@ -61,6 +61,21 @@ Btn parseBtn(const std::string& s) {
   return Btn::None;
 }
 
+std::vector<uint32_t> parseKeys(const std::string& raw) {
+  std::vector<uint32_t> out;
+  size_t start = 0;
+  while (start < raw.size()) {
+    const size_t comma = raw.find(',', start);
+    const std::string part = raw.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    const long long vk = getInt({{"v", part}}, "v", 0);
+    if (vk < 1 || vk > 254) return {};
+    out.push_back(static_cast<uint32_t>(vk));
+    if (comma == std::string::npos) break;
+    start = comma + 1;
+  }
+  return out;
+}
+
 }  // namespace
 
 Command parseCommand(const std::string& line, const Config& current) {
@@ -78,6 +93,8 @@ Command parseCommand(const std::string& line, const Config& current) {
     if (m.count("emoteTrigger") != 0 && !parseEmoteTrigger(m["emoteTrigger"], cfg.emoteTrigger)) return c;
     cfg.emoteTriggerVk = static_cast<uint32_t>(getInt(m, "emoteTriggerVk", cfg.emoteTriggerVk));
     cfg.emoteClick = getBool(m, "emoteClick", cfg.emoteClick);
+    if (m.count("actionTrigger") != 0 && !parseEmoteTrigger(m["actionTrigger"], cfg.actionTrigger)) return c;
+    cfg.actionTriggerVk = static_cast<uint32_t>(getInt(m, "actionTriggerVk", cfg.actionTriggerVk));
     const long long drag = getInt(m, "dragThresholdPx", cfg.dragThresholdPx);
     cfg.dragThresholdPx = drag < 1 ? 1 : static_cast<int>(drag);
     cfg.toggleMods = static_cast<uint32_t>(getInt(m, "toggleMods", cfg.toggleMods));
@@ -93,6 +110,12 @@ Command parseCommand(const std::string& line, const Config& current) {
     c.flag = getBool(m, "on", false);
   } else if (type == "shutdown") {
     c.kind = Command::Kind::Shutdown;
+  } else if (type == "injectKeys") {
+    const auto keys = parseKeys(getStr(m, "keys"));
+    if (keys.empty() || keys.size() > 6) return c;
+    c.kind = Command::Kind::InjectKeys;
+    for (uint32_t vk : keys) c.injects.push_back({InjectKind::KeyDown, Btn::None, vk});
+    for (auto it = keys.rbegin(); it != keys.rend(); ++it) c.injects.push_back({InjectKind::KeyUp, Btn::None, *it});
   } else if (type == "sim") {
     const std::string ev = getStr(m, "ev");
     c.timeMs = static_cast<uint64_t>(getInt(m, "t", 0));

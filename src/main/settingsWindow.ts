@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
+import { APP_DISPLAY_NAME } from '../shared/branding';
 import { SETTINGS_CH } from '../shared/settingsChannels';
 import { assetPath, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
 
@@ -85,7 +86,7 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     height: 680,
     minWidth: 720,
     minHeight: 520,
-    title: 'lolPing',
+    title: APP_DISPLAY_NAME,
     icon: nativeImage.createFromPath(assetPath('textures', 'generic_ping.png')),
     show: false,
     ...chromeOptions(),

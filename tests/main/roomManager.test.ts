@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { HeartsteelHit, HeartsteelTarget } from '../../src/shared/heartsteel';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
 import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
+import type { LiveChatMessage, RoomChatState } from '../../src/shared/roomChat';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
 
@@ -25,6 +27,29 @@ class Remote {
   emote(extra: Record<string, unknown> = {}): void {
     this.lan.deliver(this.key, this.packet({ t: 'emote', e: 'gg', d: 1, x: 0.5, y: 0.25, ...extra }));
   }
+  chat(text: string, extra: Record<string, unknown> = {}): void {
+    this.lan.deliver(this.key, this.packet({
+      t: 'chat', id: `c${this.peer}`.slice(0, 32).padEnd(32, '0'), text, ...extra,
+    }));
+  }
+  historyRequest(request = 'fedcba9876543210fedcba9876543210'): void {
+    this.lan.deliver(this.key, this.packet({ t: 'chatHistoryRequest', request }));
+  }
+  history(request: string, part: number, total: number, messages: unknown[]): void {
+    this.lan.deliver(this.key, this.packet({ t: 'chatHistory', request, part, total, messages }));
+  }
+  state(enabled: boolean): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelState', enabled }));
+  }
+  target(id: string, d: number, x: number, y: number, createdAt: number, expiresAt: number): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelTarget', id, d, x, y, createdAt, expiresAt }));
+  }
+  claim(id: string): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelClaim', id }));
+  }
+  hit(id: string, winner: string, damage: number, bonusGain: number, bonusHealth: number): void {
+    this.lan.deliver(this.key, this.packet({ t: 'heartsteelHit', id, winner, damage, bonusGain, bonusHealth }));
+  }
   bye(): void {
     this.lan.deliver(this.key, this.packet({ t: 'bye' }));
   }
@@ -32,11 +57,15 @@ class Remote {
 
 let lan: FakeTransport;
 let room: RoomManager;
-let profile: { name: string; color: number; limit: number };
+let profile: { name: string; color: number; limit: number; heartsteelBonusHealth: number };
 let pings: RemotePing[];
 let emotes: RemoteEmote[];
 let toasts: RoomToast[];
 let saved: (string | null)[];
+let chats: RoomChatState[];
+let liveChats: LiveChatMessage[];
+let heartsteelTargets: HeartsteelTarget[];
+let heartsteelClears: Array<{ id: string } | null>;
 
 function sentMessages(to?: string): RoomMessage[] {
   return lan.sent
@@ -52,11 +81,15 @@ async function joinActive(): Promise<void> {
 beforeEach(() => {
   vi.useFakeTimers({ now: 1_780_000_000_000 });
   lan = new FakeTransport('lan');
-  profile = { name: 'Me', color: 1, limit: 5 };
+  profile = { name: 'Me', color: 1, limit: 5, heartsteelBonusHealth: 0 };
   pings = [];
   emotes = [];
   toasts = [];
   saved = [];
+  chats = [];
+  liveChats = [];
+  heartsteelTargets = [];
+  heartsteelClears = [];
   room = new RoomManager({
     transports: [lan],
     now: () => Date.now(),
@@ -64,13 +97,18 @@ beforeEach(() => {
     deriveKeys: async () => KEYS,
     appVersion: '0.3.0',
     profile: () => profile,
+    displayNumbers: () => [1, 2],
     resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
-    announceEmotes: () => [],
   });
   room.on('remotePing', (p: RemotePing) => pings.push(p));
   room.on('remoteEmote', (p: RemoteEmote) => emotes.push(p));
   room.on('toast', (t: RoomToast) => toasts.push(t));
   room.on('saveCode', (c: string | null) => saved.push(c));
+  room.on('chatState', (s: RoomChatState) => chats.push(s));
+  room.on('chatMessage', (m: LiveChatMessage) => liveChats.push(m));
+  room.on('heartsteelTarget', (t: HeartsteelTarget) => heartsteelTargets.push(t));
+  room.on('heartsteelClear', (t: { id: string } | null) => heartsteelClears.push(t));
+  room.on('heartsteelBonusHealth', (n: number) => { profile.heartsteelBonusHealth = n; });
 });
 
 afterEach(() => {
@@ -203,7 +241,7 @@ describe('members', () => {
 
   /** A presence sealed with the room key but stamped an hour ago: a captured packet replayed later, or a bad clock. */
   const stalePresence = (r: Remote, name = 'Old') => lan.deliver(r.key, seal(KEYS.msgKey, encodeMessage({
-    t: 'presence', peer: r.peer, seq: ++r.seq, ts: Date.now() - 3_600_000, proto: 1, app: '1', name, color: 0, status: 'on', em: [],
+    t: 'presence', peer: r.peer, seq: ++r.seq, ts: Date.now() - 3_600_000, proto: 1, app: '1', name, color: 0, status: 'on',
   })));
 
   it('never adds, answers or counts a member from stale packets, so replays cannot fill the room', async () => {
@@ -365,6 +403,203 @@ describe('incoming emotes', () => {
   });
 });
 
+describe('heartsteel room state', () => {
+  it('shows personal Heartsteel health while idle so solo Heartsteel is discoverable', () => {
+    const state = room.state();
+    expect(state.phase).toBe('idle');
+    expect(state.heartsteel).toEqual({ enabled: false, target: null, lastHit: null });
+    expect(state.members[0]).toMatchObject({
+      self: true,
+      name: 'Me',
+      heartsteelBonusHealth: 0,
+      heartsteelMaxHealth: 2000,
+    });
+  });
+
+  it('shows personal Heartsteel health on members and starts disabled', async () => {
+    profile.heartsteelBonusHealth = 57;
+    await joinActive();
+    const state = room.state();
+    expect(state.heartsteel).toEqual({ enabled: false, target: null, lastHit: null });
+    expect(state.members[0]).toMatchObject({
+      self: true,
+      heartsteelBonusHealth: 57,
+      heartsteelMaxHealth: 2057,
+    });
+  });
+
+  it('runs Heartsteel locally when not in a room', async () => {
+    const hits: HeartsteelHit[] = [];
+    const bonusUpdates: number[] = [];
+    room.on('heartsteelHit', (h: HeartsteelHit) => hits.push(h));
+    room.on('heartsteelBonusHealth', (n: number) => bonusUpdates.push(n));
+
+    room.setHeartsteelEnabled(true);
+    expect(room.state().phase).toBe('idle');
+    expect(room.state().heartsteel.enabled).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(heartsteelTargets).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(heartsteelTargets).toHaveLength(1);
+
+    const target = heartsteelTargets[0];
+    room.claimHeartsteelTarget(target.id);
+
+    expect(hits).toEqual([
+      expect.objectContaining({
+        id: target.id,
+        winner: SELF,
+        winnerName: 'Me',
+        winnerColor: 1,
+        damage: 245,
+        bonusGain: 25,
+        bonusHealth: 25,
+        maxHealth: 2025,
+      }),
+    ]);
+    expect(bonusUpdates).toEqual([25]);
+    expect(profile.heartsteelBonusHealth).toBe(25);
+    expect(room.state().members[0]).toMatchObject({ heartsteelBonusHealth: 25, heartsteelMaxHealth: 2025 });
+    expect(sentMessages().filter((m) => m.t.startsWith('heartsteel'))).toEqual([]);
+  });
+
+  it('returns to local Heartsteel after leaving a room while enabled', async () => {
+    await joinActive();
+    room.setHeartsteelEnabled(true);
+    room.leave();
+
+    expect(room.state()).toMatchObject({ phase: 'idle', heartsteel: { enabled: true } });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
+  });
+
+  it('clears local Heartsteel targets when quitting from idle', async () => {
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(room.state().heartsteel.target).toBeTruthy();
+
+    room.quit();
+
+    expect(room.state().heartsteel).toEqual({ enabled: false, target: null, lastHit: null });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
+  });
+
+  it('syncs the Heartsteel enabled state to room members', async () => {
+    await joinActive();
+    new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
+    lan.sent = [];
+    room.setHeartsteelEnabled(true);
+    expect(room.state().heartsteel.enabled).toBe(true);
+    expect(sentMessages('lan:higher').at(-1)).toMatchObject({ t: 'heartsteelState', enabled: true });
+
+    room.setHeartsteelEnabled(false);
+    expect(room.state().heartsteel.enabled).toBe(false);
+    expect(room.state().heartsteel.target).toBeNull();
+    expect(heartsteelClears.at(-1)).toBeNull();
+  });
+
+  it('only the lowest peer id schedules targets every 3 seconds', async () => {
+    await joinActive();
+    new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
+    lan.sent = [];
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
+    expect(sentMessages('lan:higher').filter((m) => m.t === 'heartsteelTarget').at(-1)).toMatchObject({
+      t: 'heartsteelTarget',
+      id: heartsteelTargets[0].id,
+    });
+
+    const lower = new Remote('0000000000000001', 'lan:lower', lan);
+    lower.presence();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
+  });
+
+  it('expires an unclaimed target and schedules the next one', async () => {
+    await joinActive();
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    const first = heartsteelTargets[0];
+    await vi.advanceTimersByTimeAsync(2401);
+    expect(heartsteelClears.at(-1)).toEqual({ id: first.id });
+    expect(room.state().heartsteel.target).toBeNull();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(heartsteelTargets).toHaveLength(2);
+  });
+
+  it('scheduler turns the first valid claim into one final hit and local bonus gain', async () => {
+    const hits: HeartsteelHit[] = [];
+    const bonusUpdates: number[] = [];
+    room.on('heartsteelHit', (h: HeartsteelHit) => hits.push(h));
+    room.on('heartsteelBonusHealth', (n: number) => bonusUpdates.push(n));
+
+    await joinActive();
+    new Remote('ffffffffffffffff', 'lan:higher', lan).presence();
+    lan.sent = [];
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    const target = heartsteelTargets[0];
+
+    room.claimHeartsteelTarget(target.id);
+
+    expect(hits).toEqual([
+      expect.objectContaining({
+        id: target.id,
+        winner: SELF,
+        winnerName: 'Me',
+        winnerColor: 1,
+        damage: 245,
+        bonusGain: 25,
+        bonusHealth: 25,
+        maxHealth: 2025,
+      }),
+    ]);
+    expect(bonusUpdates).toEqual([25]);
+    expect(room.state().heartsteel.target).toBeNull();
+    expect(sentMessages('lan:higher').filter((m) => m.t === 'heartsteelHit')).toHaveLength(1);
+
+    room.claimHeartsteelTarget(target.id);
+    expect(hits).toHaveLength(1);
+  });
+
+  it('non-schedulers broadcast a claim and wait for the scheduler hit', async () => {
+    await joinActive();
+    const lower = new Remote('0000000000000001', 'lan:lower', lan);
+    lower.presence();
+    lower.state(true);
+    lower.target('22222222222222222222222222222222', 1, 0.4, 0.5, Date.now(), Date.now() + 2400);
+
+    room.claimHeartsteelTarget('22222222222222222222222222222222');
+
+    expect(sentMessages('lan:lower').at(-1)).toMatchObject({ t: 'heartsteelClaim', id: '22222222222222222222222222222222' });
+    lower.hit('22222222222222222222222222222222', SELF, 245, 25, 25);
+    expect(room.state().members[0]).toMatchObject({ heartsteelBonusHealth: 25, heartsteelMaxHealth: 2025 });
+  });
+
+  it('scheduler resolves the first remote claim only', async () => {
+    const hits: HeartsteelHit[] = [];
+    room.on('heartsteelHit', (h: HeartsteelHit) => hits.push(h));
+    await joinActive();
+    const alex = new Remote('bbbbbbbbbbbbbbbb', 'lan:alex', lan);
+    const ben = new Remote('cccccccccccccccc', 'lan:ben', lan);
+    alex.presence({ heartsteelBonusHealth: 50 });
+    ben.presence({ heartsteelBonusHealth: 0 });
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    const target = heartsteelTargets[0];
+
+    alex.claim(target.id);
+    ben.claim(target.id);
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ winner: alex.peer, damage: 248, bonusGain: 25, bonusHealth: 75 });
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'heartsteelHit')).toHaveLength(1);
+  });
+});
+
 describe('outgoing', () => {
   it('sends an emote to each member over its path, and nothing when idle or paused', async () => {
     room.sendEmote('gg', { d: 1, x: 0.1, y: 0.2 });
@@ -454,7 +689,11 @@ describe('outgoing', () => {
     expect(sentMessages('*').map((m) => m.t)).toEqual(['bye']);
     expect(lan.started).toBeNull();
     expect(saved.at(-1)).toBeNull();
-    expect(room.state()).toMatchObject({ phase: 'idle', code: null, members: [] });
+    expect(room.state()).toMatchObject({
+      phase: 'idle',
+      code: null,
+      members: [expect.objectContaining({ self: true, heartsteelMaxHealth: 2000 })],
+    });
 
     await joinActive();
     const before = saved.length;
@@ -467,7 +706,7 @@ describe('outgoing', () => {
     let n = 0;
     const fresh = new RoomManager({
       transports: [lan], now: () => Date.now(), randomBytes: (k) => Uint8Array.from({ length: k }, () => ++n & 255),
-      deriveKeys: async () => KEYS, appVersion: '0.3.0', profile: () => profile, resolveTarget: () => null, announceEmotes: () => [],
+      deriveKeys: async () => KEYS, appVersion: '0.3.0', profile: () => profile, displayNumbers: () => [1], resolveTarget: () => null,
     });
     await fresh.join(CODE);
     const first = sentMessages('*').at(-1)!;
@@ -483,7 +722,7 @@ describe('outgoing', () => {
   it('goes back to idle and reports failure when the keys cannot be derived', async () => {
     const broken = new RoomManager({
       transports: [lan], now: () => Date.now(), randomBytes: (k) => new Uint8Array(k), appVersion: '0.3.0',
-      deriveKeys: async () => { throw new Error('out of memory'); }, profile: () => profile, resolveTarget: () => null, announceEmotes: () => [],
+      deriveKeys: async () => { throw new Error('out of memory'); }, profile: () => profile, displayNumbers: () => [1], resolveTarget: () => null,
     });
     expect(await broken.join(CODE)).toEqual({ ok: false, error: 'failed' });
     expect(broken.state().phase).toBe('idle');
@@ -512,8 +751,8 @@ describe('two transports', () => {
     both = new RoomManager({
       transports: [lan, net], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xcd),
       deriveKeys: async () => KEYS, appVersion: '0.3.0', profile: () => profile,
+      displayNumbers: () => [1],
       resolveTarget: () => ({ displayId: 1, width: 100, height: 100 }),
-      announceEmotes: () => [],
     });
     both.on('remotePing', (p: RemotePing) => got.push(p));
     await both.join(CODE);
@@ -558,6 +797,184 @@ describe('two transports', () => {
   });
 });
 
+describe('chat', () => {
+  it('sends a local message with sending then sent state, independent of ping mute flags', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence({ name: 'Alex', color: 4 });
+    const before = chats.length;
+    room.setStatusFlags({ paused: true, roomMuted: true });
+    room.muteMember(alex.peer, true);
+    const result = room.sendChat('hello');
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error('expected chat send to succeed');
+    expect(chats.slice(before).map((s) => s.messages.at(-1)?.status)).toEqual(['sending', 'sent']);
+    expect(room.chatState().messages).toMatchObject([{ text: 'hello', self: true, status: 'sent' }]);
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'chat')).toHaveLength(1);
+    expect(liveChats).toEqual([expect.objectContaining({
+      id: result.id,
+      peer: SELF,
+      name: 'Me',
+      color: 1,
+      text: 'hello',
+      self: true,
+    })]);
+  });
+
+  it('accepts chat while alone and hands it to a later member', async () => {
+    await joinActive();
+    expect(room.sendChat('before Alex')).toMatchObject({ ok: true });
+    expect(room.chatState().messages).toHaveLength(1);
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence({ name: 'Alex' });
+    alex.historyRequest('0123456789abcdef0123456789abcdef');
+    expect(sentMessages('lan:alex').some((m) => m.t === 'chatHistory')).toBe(true);
+  });
+
+  it('rejects sends while idle or joining and validates text before adding a message', async () => {
+    expect(room.sendChat('hello')).toEqual({ ok: false, error: 'not-in-room' });
+    await room.join(formatRoomCode(CODE));
+    expect(room.sendChat('hello')).toEqual({ ok: false, error: 'not-in-room' });
+    await vi.advanceTimersByTimeAsync(3000);
+    for (const [text, error] of [['   ', 'empty'], ['x'.repeat(1001), 'too-long']] as const) {
+      expect(room.sendChat(text)).toEqual({ ok: false, error });
+    }
+    expect(room.chatState().messages).toEqual([]);
+  });
+
+  it('does not accept unknown chat senders and applies an independent incoming limit', async () => {
+    await joinActive();
+    const stranger = new Remote('1111111111111111', 'lan:stranger', lan);
+    stranger.chat('ignored');
+    expect(room.chatState().messages).toEqual([]);
+    const alex = new Remote('2222222222222222', 'lan:alex', lan);
+    alex.presence({ name: 'Alex' });
+    for (let i = 0; i < 12; i++) alex.chat(`message-${i}`, { id: i.toString(16).padStart(32, '0') });
+    expect(room.chatState().messages).toHaveLength(10);
+  });
+
+  it('retries a failed local message with the same ID', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence();
+    lan.emit('peerGone', alex.key);
+    const first = room.sendChat('retry me');
+    expect(first).toMatchObject({ ok: false, error: 'failed' });
+    const failed = room.chatState().messages[0];
+    expect(failed.status).toBe('failed');
+    expect(liveChats).toEqual([]);
+    alex.presence();
+    lan.sent = [];
+    const retried = room.retryChat(failed.id);
+    expect(retried).toEqual({ ok: true, id: failed.id });
+    expect(room.chatState().messages).toHaveLength(1);
+    expect(room.chatState().messages[0]).toMatchObject({ id: failed.id, status: 'sent' });
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'chat').map((m) => m.t === 'chat' && m.id)).toEqual([failed.id]);
+    expect(liveChats).toEqual([expect.objectContaining({
+      id: failed.id,
+      peer: SELF,
+      name: 'Me',
+      color: 1,
+      text: 'retry me',
+      self: true,
+    })]);
+  });
+
+  it('deduplicates chat packets arriving twice and ignores ping/emote gates', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence({ name: 'Alex', color: 4 });
+    const packet = alex.packet({ t: 'chat', id: '0123456789abcdef0123456789abcdef', text: 'once' });
+    room.setStatusFlags({ paused: true, roomMuted: true });
+    room.muteMember(alex.peer, true);
+    lan.deliver(alex.key, packet);
+    lan.deliver('lan:other', packet);
+    expect(room.chatState().messages).toMatchObject([{ text: 'once', self: false }]);
+    expect(liveChats).toEqual([expect.objectContaining({
+      id: '0123456789abcdef0123456789abcdef',
+      peer: alex.peer,
+      name: 'Alex',
+      color: 4,
+      text: 'once',
+      self: false,
+    })]);
+  });
+
+  it('merges valid history parts from multiple responders, dedupes and keeps the latest 200', async () => {
+    await room.join(formatRoomCode(CODE));
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    const ben = new Remote('2222222222222222', 'lan:ben', lan);
+    alex.presence();
+    ben.presence();
+    const request = sentMessages('lan:alex').find((m) => m.t === 'chatHistoryRequest');
+    expect(request?.t).toBe('chatHistoryRequest');
+    if (request?.t !== 'chatHistoryRequest') return;
+    const ids = Array.from({ length: 201 }, (_, i) => (i + 1).toString(16).padStart(32, '0'));
+    const item = (id: string, peer: string, text: string) => ({ id, peer, ts: Number.parseInt(id.slice(-2), 16), name: peer === alex.peer ? 'Alex' : 'Ben', color: 2, text });
+    const perPacket = 4;
+    const chunks = Array.from({ length: Math.ceil(ids.length / perPacket) }, (_, i) => ids.slice(i * perPacket, i * perPacket + perPacket));
+    const alexChunks = chunks.slice(0, 26);
+    const benChunks = chunks.slice(26);
+    alexChunks.forEach((chunk, part) => alex.history(request.request, part, alexChunks.length, chunk.map((id) => item(id, alex.peer, 'x'))));
+    benChunks.forEach((chunk, part) => {
+      const messages = chunk.map((id) => item(id, ben.peer, 'x'));
+      if (part === 0) messages.push(item(ids[10], ben.peer, 'duplicate id from another member'));
+      ben.history(request.request, part, benChunks.length, messages);
+    });
+    ben.history(request.request, 0, 1, [item(ids[200], ben.peer, 'duplicate')]);
+    expect(room.chatState().messages).toHaveLength(200);
+    expect(new Set(room.chatState().messages.map((m) => m.id)).size).toBe(200);
+    expect(room.chatState().messages[0].id).toBe(ids[1]);
+    expect(liveChats).toEqual([]);
+  });
+
+  it('does not include a failed local message in history until retry succeeds', async () => {
+    await joinActive();
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence();
+    lan.emit('peerGone', alex.key);
+    const first = room.sendChat('not yet');
+    expect(first).toMatchObject({ ok: false, error: 'failed' });
+    alex.presence();
+    lan.sent = [];
+    alex.historyRequest('0123456789abcdef0123456789abcdef');
+    expect(sentMessages('lan:alex').filter((m) => m.t === 'chatHistory')).toEqual([
+      expect.objectContaining({ t: 'chatHistory', messages: [] }),
+    ]);
+    const failed = room.chatState().messages[0];
+    expect(room.retryChat(failed.id)).toEqual({ ok: true, id: failed.id });
+    lan.sent = [];
+    alex.historyRequest('fedcba9876543210fedcba9876543210');
+    const historyMsg = sentMessages('lan:alex').find((m) => m.t === 'chatHistory');
+    expect(historyMsg).toMatchObject({ t: 'chatHistory', messages: [expect.objectContaining({ id: failed.id, text: 'not yet' })] });
+  });
+
+  it('rejoining the same code is empty unless an in-memory member hands history back', async () => {
+    await joinActive();
+    room.sendChat('recoverable');
+    const old = room.chatState().messages[0];
+    room.leave();
+    await room.join(formatRoomCode(CODE));
+    expect(room.chatState().messages).toEqual([]);
+    const alex = new Remote('1111111111111111', 'lan:alex', lan);
+    alex.presence();
+    const request = sentMessages('lan:alex').find((m) => m.t === 'chatHistoryRequest');
+    expect(request?.t).toBe('chatHistoryRequest');
+    if (request?.t !== 'chatHistoryRequest') return;
+    alex.history(request.request, 0, 1, [{ id: old.id, peer: SELF, ts: old.ts, name: 'Me', color: 1, text: old.text }]);
+    expect(room.chatState().messages).toMatchObject([{ id: old.id, text: 'recoverable' }]);
+  });
+
+  it('clears chat state when leaving the room', async () => {
+    await joinActive();
+    room.sendChat('gone on leave');
+    expect(room.chatState().messages).toHaveLength(1);
+    room.leave();
+    expect(room.chatState()).toEqual({ phase: 'idle', code: null, members: 0, messages: [] });
+    expect(chats.at(-1)).toEqual({ phase: 'idle', code: null, members: 0, messages: [] });
+  });
+});
+
 describe('internet over a shared transport', () => {
   let net: FakeTransport;
   let inet: RoomManager;
@@ -566,8 +983,8 @@ describe('internet over a shared transport', () => {
     const r = new RoomManager({
       transports, now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xef),
       deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => profile,
+      displayNumbers: () => [1],
       resolveTarget: () => ({ displayId: 1, width: 100, height: 100 }),
-      announceEmotes: () => [],
     });
     r.on('toast', (t: RoomToast) => gone.push(t));
     return r;
@@ -766,179 +1183,5 @@ describe('internet over a shared transport', () => {
     expect(net.starts - net.stops).toBe(0);
     expect(net.started).toBeNull();
     expect(inet.state().internet).toBe('off');
-  });
-});
-
-
-describe('emote transfers', () => {
-  let emotes: { peer: string; hashes: string[] }[];
-  let wants: RoomMessage[];
-  let chunks: RoomMessage[];
-  const hash = '0123456789abcdef0123456789abcdef';
-
-  /** The room under test, with the self peer id pinned so `want` addressing can be asserted. */
-  const make = (): RoomManager => {
-    const r = new RoomManager({
-      transports: [lan], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xab),
-      deriveKeys: async () => KEYS, appVersion: '0.5.1', profile: () => profile,
-      resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
-      announceEmotes: () => [hash],
-    });
-    r.on('emotes', (peer: string, hashes: string[]) => emotes.push({ peer, hashes }));
-    r.on('want', (w: RoomMessage) => wants.push(w));
-    r.on('chunk', (c: RoomMessage) => chunks.push(c));
-    return r;
-  };
-
-  beforeEach(() => {
-    vi.useFakeTimers({ now: 1_780_000_000_000 });
-    lan = new FakeTransport('lan');
-    emotes = [];
-    wants = [];
-    chunks = [];
-    room = make();
-    pings = [];
-    emotes = [];
-    toasts = [];
-    saved = [];
-  });
-
-  afterEach(() => {
-    room.quit();
-    vi.useRealTimers();
-  });
-
-  it('announces our wheel hashes in every presence, and reads a member’s announcements', async () => {
-    await joinActive();
-    const alex = new Remote('1111111111111111', 'lan:a', lan);
-    alex.presence({ em: [hash] });
-    expect(emotes.at(-1)).toEqual({ peer: '1111111111111111', hashes: [hash] });
-    const mine = sentMessages('lan:a').find((m) => m.t === 'presence');
-    expect(mine).toMatchObject({ em: [hash] });
-  });
-
-  it('hands a want addressed to us to the transfer layer, and drops one aimed elsewhere', async () => {
-    await joinActive();
-    const alex = new Remote('1111111111111111', 'lan:a', lan);
-    alex.presence();
-    lan.sent = [];
-    lan.deliver(alex.key, alex.packet({ t: 'want', to: room.self, h: hash, need: [] }));
-    lan.deliver(alex.key, alex.packet({ t: 'want', to: '9999999999999999', h: hash, need: [] }));
-    expect(wants).toHaveLength(1);
-    expect(wants[0]).toMatchObject({ t: 'want', to: room.self });
-  });
-
-  it('hands a chunk over, but nothing at all from a muted member', async () => {
-    await joinActive();
-    const alex = new Remote('1111111111111111', 'lan:a', lan);
-    alex.presence();
-    lan.sent = [];
-    lan.deliver(alex.key, alex.packet({ t: 'chunk', h: hash, i: 0, n: 2, b: 'QQ==' }));
-    expect(chunks).toHaveLength(1);
-    room.muteMember('1111111111111111', true);
-    lan.deliver(alex.key, alex.packet({ t: 'chunk', h: hash, i: 1, n: 2, b: 'QQ==' }));
-    lan.deliver(alex.key, alex.packet({ t: 'want', to: room.self, h: hash, need: [] }));
-    expect(chunks).toHaveLength(1);
-    expect(wants).toHaveLength(0);
-  });
-
-  it('spends shared tokens on chunks only while five stay for pings', async () => {
-    await joinActive();
-    new Remote('1111111111111111', 'lan:a', lan).presence();
-    const spent: boolean[] = [];
-    for (let n = 0; n < 7; n++) spent.push(room.spareSharedToken(5));
-    expect(spent).toEqual([true, true, true, true, true, false, false]);
-    // a ping still goes out afterwards: the bucket kept its burst
-    lan.sent = [];
-    room.sendPing('omw', { d: 1, x: 0.5, y: 0.5 });
-    expect(sentMessages()).toHaveLength(1);
-  });
-
-  it('tells the transfer layer when a member is gone, including on quit', async () => {
-    await joinActive();
-    const gonePeers: string[] = [];
-    room.on('memberGone', (peer: string) => gonePeers.push(peer));
-    const alex = new Remote('1111111111111111', 'lan:a', lan);
-    alex.presence();
-    alex.bye();
-    expect(gonePeers).toEqual(['1111111111111111']);
-    const ben = new Remote('2222222222222222', 'lan:b', lan);
-    ben.presence();
-    room.quit();
-    expect(gonePeers).toEqual(['1111111111111111', '2222222222222222']);
-  });
-});
-
-describe('emote transfer gating (audit regressions)', () => {
-  const hash = '0123456789abcdef0123456789abcdef';
-
-  beforeEach(() => {
-    vi.useFakeTimers({ now: 1_780_000_000_000 });
-    lan = new FakeTransport('lan');
-    pings = [];
-    emotes = [];
-    toasts = [];
-    saved = [];
-    room = new RoomManager({
-      transports: [lan], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xab),
-      deriveKeys: async () => KEYS, appVersion: '0.6.0', profile: () => profile,
-      resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
-      announceEmotes: () => [],
-    });
-  });
-
-  afterEach(() => {
-    room.quit();
-    vi.useRealTimers();
-  });
-
-  it('ignores new members once the room is full, however many presences arrive', async () => {
-    await joinActive();
-    for (let n = 0; n < 12; n++) new Remote(`${n}`.repeat(16), `lan:${n}`, lan).presence();
-    const remote = room.state().members.filter((m) => !m.self);
-    expect(remote).toHaveLength(8); // MAX_MEMBERS: the ninth and on never became members
-  });
-
-  it('lets at most two members share one LAN address', async () => {
-    await joinActive();
-    new Remote('1111111111111111', 'lan:same', lan).presence();
-    new Remote('2222222222222222', 'lan:same', lan).presence();
-    new Remote('3333333333333333', 'lan:same', lan).presence(); // a rebound is fine, a third is forgery
-    new Remote('4444444444444444', 'lan:other', lan).presence();
-    expect(room.state().members.filter((m) => !m.self)).toHaveLength(3);
-  });
-
-  it('counts want and chunk messages against their own per-member bucket', async () => {
-    await joinActive();
-    const alex = new Remote('1111111111111111', 'lan:a', lan);
-    alex.presence();
-    const seen: RoomMessage[] = [];
-    room.on('want', (w: RoomMessage) => seen.push(w));
-    room.on('chunk', (c: RoomMessage) => seen.push(c));
-    for (let n = 0; n < 100; n++) lan.deliver(alex.key, alex.packet({ t: 'want', to: room.self, h: hash, need: [] }));
-    expect(seen).toHaveLength(60); // the first sixty pass, the flood behind them meets the wall
-    await vi.advanceTimersByTimeAsync(1000);
-    lan.deliver(alex.key, alex.packet({ t: 'want', to: room.self, h: hash, need: [] }));
-    expect(seen).toHaveLength(61); // the bucket refills for a well-behaved sender
-  });
-
-  it('neither fetches nor serves stills while paused, and resumes on the next presence', async () => {
-    await joinActive();
-    const seen: RoomMessage[] = [];
-    let announced: { peer: string; hashes: string[] }[] = [];
-    room.on('want', (w: RoomMessage) => seen.push(w));
-    room.on('chunk', (c: RoomMessage) => seen.push(c));
-    room.on('emotes', (peer: string, hashes: string[]) => announced.push({ peer, hashes }));
-    room.setStatusFlags({ paused: true, roomMuted: false });
-    const alex = new Remote('1111111111111111', 'lan:a', lan);
-    alex.presence({ em: [hash] });
-    lan.deliver(alex.key, alex.packet({ t: 'want', to: room.self, h: hash, need: [] }));
-    lan.deliver(alex.key, alex.packet({ t: 'chunk', h: hash, i: 0, n: 2, b: 'QQ==' }));
-    expect(seen).toHaveLength(0);
-    expect(announced).toHaveLength(0); // no prefetch either: the transfer layer hears nothing
-
-    room.setStatusFlags({ paused: false, roomMuted: false });
-    alex.presence({ em: [hash] });
-    expect(announced).toHaveLength(1); // the next presence after unpausing starts prefetch again
   });
 });

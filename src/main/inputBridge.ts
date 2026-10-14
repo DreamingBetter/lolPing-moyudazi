@@ -43,7 +43,13 @@ export class InputBridge extends EventEmitter {
     if (this.child || this.restartTimer) return;
     this.stopping = false;
     this.setStatus('starting');
-    const child = spawn(this.opts.command, this.opts.args ?? [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let child: ChildProcess;
+    try {
+      child = spawn(this.opts.command, this.opts.args ?? [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    } catch (err) {
+      this.onExit((err as Error).message, null);
+      return;
+    }
     this.child = child;
     let gone = false;
     const onGone = (reason: string, code: number | null = null) => {
@@ -64,6 +70,11 @@ export class InputBridge extends EventEmitter {
   send(cmd: HelperCommand): void {
     if (cmd.type === 'config') this.lastConfig = cmd;
     this.write(cmd);
+  }
+
+  injectKeys(keys: number[]): void {
+    const valid = keys.filter((k) => Number.isInteger(k) && k >= 1 && k <= 254);
+    if (valid.length === keys.length && valid.length > 0 && valid.length <= 6) this.write({ type: 'injectKeys', keys: valid });
   }
 
   /** Manual restart after the bridge gave up. */

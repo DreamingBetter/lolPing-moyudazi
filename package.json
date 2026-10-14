@@ -1,14 +1,17 @@
 {
-  "name": "lolping",
-  "productName": "lolPing",
-  "version": "0.5.1",
+  "name": "lolping-moyudazi",
+  "productName": "lolPing-摸鱼搭子",
+  "version": "0.6.0",
   "private": true,
-  "description": "League of Legends style ping wheel for your Windows and macOS desktop",
-  "author": "Danrui Meng (https://github.com/darrenprx)",
+  "description": "League of Legends style desktop wheels and shortcuts for Windows",
+  "author": "DreamingBetter",
   "license": "MIT",
-  "homepage": "https://github.com/darrenprx/lolPing#readme",
-  "repository": { "type": "git", "url": "https://github.com/darrenprx/lolPing.git" },
-  "bugs": "https://github.com/darrenprx/lolPing/issues",
+  "homepage": "https://github.com/DreamingBetter/lolPing-moyudazi#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DreamingBetter/lolPing-moyudazi.git"
+  },
+  "bugs": "https://github.com/DreamingBetter/lolPing-moyudazi/issues",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -18,8 +21,7 @@
     "test": "vitest run",
     "build:helper": "node native/hook-helper/run.mjs build",
     "test:helper": "node native/hook-helper/run.mjs test",
-    "dist": "npm run build:helper && electron-vite build && electron-builder --win --publish never",
-    "dist:mac": "npm run build:helper && electron-vite build && electron-builder --mac --arm64 --publish never",
+    "dist": "npm run build:helper && electron-vite build && node tools/build-win.mjs",
     "dev:site": "vite --config site/vite.config.ts",
     "build:site": "vite build --config site/vite.config.ts",
     "media": "npm run build:site && electron tools/capture-media/capture.mjs"
@@ -46,39 +48,46 @@
     "ws": "8.22.0"
   },
   "build": {
-    "appId": "com.lolping.app",
-    "productName": "lolPing",
-    "directories": { "output": "release", "buildResources": "build" },
-    "files": ["out/**/*", "package.json"],
+    "appId": "com.dreamingbetter.lolping.moyudazi.windows",
+    "productName": "lolPing-摸鱼搭子",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
-      "extraResources": [{ "from": "native/hook-helper/build/hook-helper.exe", "to": "hook-helper.exe" }]
+      "extraResources": [
+        {
+          "from": "native/hook-helper/build/hook-helper.exe",
+          "to": "hook-helper.exe"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "lolPing-Setup-${version}.exe",
+      "artifactName": "lolPing-moyudazi-Setup-${version}.exe",
       "include": "build/installer.nsh"
     },
-    "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64"] }],
-      "icon": "build/icon.png",
-      "category": "public.app-category.utilities",
-      "identity": "-",
-      "hardenedRuntime": false,
-      "extraResources": [
-        { "from": "native/hook-helper/build/hook-helper", "to": "hook-helper" },
-        { "from": "build", "to": ".", "filter": ["tray*Template*.png"] }
-      ],
-      "extendInfo": {
-        "NSAccessibilityUsageDescription": "lolPing reads the mouse and keyboard to open the ping wheel or the emote wheel when you hold its key and drag.",
-        "NSDownloadsFolderUsageDescription": "lolPing saves update downloads to your Downloads folder.",
-        "NSLocalNetworkUsageDescription": "lolPing finds the other people in your room on the local network and sends them your pings."
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DreamingBetter",
+        "repo": "lolPing-moyudazi"
       }
-    },
-    "dmg": { "artifactName": "lolPing-${version}-arm64.dmg" },
-    "publish": [{ "provider": "github", "owner": "darrenprx", "repo": "lolPing" }]
+    ]
   }
 }

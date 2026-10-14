@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ActionKind } from '../../src/shared/actions';
 import { resolveLang, strings } from '../../src/shared/i18n';
 import { ALL_PINGS } from '../../src/shared/pings';
 import { normalizeSettings, triggerLabel } from '../../src/shared/settings';
@@ -32,6 +33,48 @@ describe('language', () => {
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort());
     for (const p of ALL_PINGS) expect(zh.pingNames[p.id], p.id).toBeTruthy();
     expect(zh.limitations).toHaveLength(en.limitations.length);
+  });
+
+  it('names the new feature badge for both UI languages', () => {
+    expect(strings('en').newFeatureBadge).toBe('NEW');
+    expect(strings('zh-CN').newFeatureBadge).toBe('NEW');
+  });
+
+  it('labels the Summoner cursor radio choices in both UI languages', () => {
+    expect(strings('en').cursorSkin).toBe('Summoner cursor');
+    expect(strings('en').cursorSkinSystem).toBe('System cursor');
+    expect(strings('en').cursorSkinModern).toBe('New cursor');
+    expect(strings('en').cursorSkinClassic).toBe('Old cursor');
+    expect(strings('zh-CN').cursorSkin).toBe('召唤师鼠标指针');
+    expect(strings('zh-CN').cursorSkinSystem).toBe('系统指针');
+    expect(strings('zh-CN').cursorSkinModern).toBe('新版指针');
+    expect(strings('zh-CN').cursorSkinClassic).toBe('旧版指针');
+  });
+
+  it('labels the Heartsteel room game in both languages', () => {
+    const en = strings('en');
+    const zh = strings('zh-CN');
+    expect(en.heartsteelTitle).toBe('Heartsteel');
+    expect(en.heartsteelToggle).toContain('Start');
+    expect(zh.heartsteelTitle).toBe('心之钢');
+    expect(zh.heartsteelToggle).toContain('开钢');
+  });
+
+  it('describes every action in both languages', () => {
+    const en = strings('en');
+    const zh = strings('zh-CN');
+    for (const kind of Object.keys(en.actionDescriptions) as ActionKind[]) {
+      expect(en.actionDescriptions[kind], `English ${kind}`).toBeTruthy();
+      expect(zh.actionDescriptions[kind], `Chinese ${kind}`).toBeTruthy();
+    }
+    expect(en.actionDescriptions.openUrl).toContain('configured');
+    expect(en.actionDescriptions.openApp).toContain('configured');
+    expect(en.actionDescriptions.volumeUp).toContain('step');
+    expect(en.actionDescriptions.volumeDown).toContain('step');
+    expect(zh.actionDescriptions.openUrl).toContain('配置');
+    expect(zh.actionDescriptions.openApp).toContain('配置');
+    expect(zh.actionDescriptions.volumeUp).toContain('步进');
+    expect(zh.actionDescriptions.volumeDown).toContain('步进');
   });
 
   it('has the same Mac wording in both languages', () => {
@@ -70,6 +113,26 @@ describe('language', () => {
       expect(t.roomLimitDesc).toContain(emote);
       expect(t.updateErrorToastTitle).not.toBe('');
     }
+  });
+
+  it('names chat danmaku settings', () => {
+    const en = strings('en');
+    expect(en.chatDanmaku).toBe('Chat danmaku');
+    expect(en.chatDanmakuAreaHalf).toBe('Top half');
+    expect(en.chatDanmakuSpeedNormal).toBe('Normal');
+  });
+
+  it('explains chat send shortcuts and the 200-message history limit in the composer placeholder', () => {
+    const en = strings('en');
+    const zh = strings('zh-CN');
+    expect(en.chatPlaceholder.split('\n')).toEqual([
+      'Write a message (Enter to send, Shift+Enter for a new line)',
+      'Keeps the most recent 200 messages',
+    ]);
+    expect(zh.chatPlaceholder.split('\n')).toEqual([
+      '输入消息（Enter 发送，Shift+Enter 换行）',
+      '消息保存最近200条',
+    ]);
   });
 
   it('defaults to auto and rejects unknown values', () => {

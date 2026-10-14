@@ -1,6 +1,7 @@
-import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
+import { Dropdown, FluentProvider, Option, Radio, RadioGroup, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
-  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Games24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
+  Apps24Regular, ArrowMove24Regular, ArrowSync24Regular, Chat24Regular, CursorClick24Regular, DataPie24Regular, Games24Regular, Info24Regular, Keyboard24Regular,
+  MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
   Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
@@ -11,8 +12,11 @@ import { hotkeyParts } from '../../shared/keys';
 import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, textureUrl, type PingId } from '../../shared/pings';
 import { triggerLabel, type Settings } from '../../shared/settings';
 import type { WheelPatch } from '../../shared/wheelLayout';
+import { APP_DISPLAY_NAME } from '../../shared/branding';
 import { api } from './api';
 import { AboutSection } from './components/AboutSection';
+import { ActionSection } from './components/ActionSection';
+import { ChatSection } from './components/ChatSection';
 import { EmoteSection } from './components/EmoteSection';
 import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
@@ -21,24 +25,34 @@ import { SettingRow, SliderRow, SwitchRow } from './components/rows';
 import { StatusCard } from './components/StatusCard';
 import { TriggerPicker } from './components/TriggerPicker';
 import { WheelEditor, type PoolItem } from './components/WheelEditor';
+import { cursorSkinPatchForScheme, cursorSkinSchemeFromSettings, type CursorSkinScheme } from './cursorSkinScheme';
 import { TextContext, useText } from './text';
 import { macDarkTheme, macLightTheme } from './macTheme';
 import { useAppState, type Update } from './useAppState';
 import { useUpdateState } from './useUpdateState';
+import { sectionHasNewFeature } from './featureBadges';
 
 const PLATFORM = api.platform;
 const MAC = PLATFORM === 'mac';
 /** macOS measures the screen in points. */
 const LENGTH_UNIT = MAC ? 'pt' : 'px';
 
-const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[] = [
-  { id: 'trigger', label: (t) => t.navTrigger, icon: <Cursor24Regular /> },
-  { id: 'toggle', label: (t) => t.navToggle, icon: <Keyboard24Regular /> },
-  { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
-  { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
-  { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
-  { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
-  { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
+type SettingsSection = { id: string; label: (t: Strings) => string; icon: ReactNode; newFeature?: boolean };
+
+function settingsSection(id: string, label: (t: Strings) => string, icon: ReactNode): SettingsSection {
+  return { id, label, icon, newFeature: sectionHasNewFeature(id) };
+}
+
+const SECTIONS: SettingsSection[] = [
+  settingsSection('trigger', (t) => t.navTrigger, <Cursor24Regular />),
+  settingsSection('toggle', (t) => t.navToggle, <Keyboard24Regular />),
+  settingsSection('pings', (t) => t.navPings, <Speaker224Regular />),
+  settingsSection('wheel', (t) => t.navWheel, <DataPie24Regular />),
+  settingsSection('emotes', (t) => t.navEmotes, <Emoji24Regular />),
+  settingsSection('actions', (t) => t.navActions, <Apps24Regular />),
+  settingsSection('chat', (t) => t.navChat, <Chat24Regular />),
+  settingsSection('room', (t) => t.navRoom, <PeopleCommunity24Regular />),
+  settingsSection('app', (t) => t.navApp, <Settings24Regular />),
 ];
 
 /** Pings that aren't in League's default wheel layout get a "new" badge. */
@@ -62,6 +76,16 @@ function useDarkMode(): boolean {
     return () => m.removeEventListener('change', onChange);
   }, []);
   return dark;
+}
+
+function FeatureLabel({ children, isNew }: { children: ReactNode; isNew?: boolean }) {
+  const t = useText();
+  return (
+    <span className="featureLabel">
+      {children}
+      {isNew ? <span className="newFeatureBadge">{t.newFeatureBadge}</span> : null}
+    </span>
+  );
 }
 
 export function App() {
@@ -93,14 +117,16 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
+  const [cursorSkinError, setCursorSkinError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
+  const showSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   const pingPool: PoolItem<PingId>[] = ALL_PINGS.map((p) => ({
     id: p.id, icon: textureUrl(p.icon), name: t.pingNames[p.id], badge: NEW_PINGS.has(p.id) ? t.wheelNew : undefined,
   }));
 
   useEffect(() => {
-    const show = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    const show = (id: string) => showSection(id);
     const initial = location.hash.slice(1);
     if (initial) requestAnimationFrame(() => show(initial));
     return api.onShowSection(show);
@@ -121,20 +147,20 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
     <div className="app">
       <div className="titlebar">
         <img src={textureUrl('generic_ping')} alt="" />
-        lolPing
+        {APP_DISPLAY_NAME}
       </div>
       <nav className="side">
         <div className="brand">
           <img src={textureUrl('pingwheel_basicpingrender')} alt="" />
           <div>
-            <b>lolPing</b>
+            <b>{APP_DISPLAY_NAME}</b>
             <span className="desc">{t.tagline}</span>
           </div>
         </div>
         {SECTIONS.map((sec) => (
-          <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} onClick={() => document.getElementById(sec.id)?.scrollIntoView({ behavior: 'smooth' })}>
+          <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} onClick={() => showSection(sec.id)}>
             {sec.icon}
-            {sec.label(t)}
+            <FeatureLabel isNew={sec.newFeature}>{sec.label(t)}</FeatureLabel>
           </button>
         ))}
       </nav>
@@ -151,7 +177,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
               {customTrigger ? <span className="desc">{t.customKeyNote}</span> : null}
             </>
           )}>
-          <TriggerPicker value={s.trigger} blocked={s.emoteTrigger}
+          <TriggerPicker value={s.trigger} blockedList={[s.emoteTrigger, s.actionTrigger]}
             onChange={(k) => { if (k !== 'off') void update({ trigger: k }); }} />
         </SettingRow>
         <SliderRow limit="dragThresholdPx" icon={<ArrowMove24Regular />} title={t.dragDistance} description={t.dragDistanceDesc}
@@ -159,11 +185,10 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<CursorClick24Regular />} title={t.clickPing(trigger)}
           description={t.clickPingDesc(trigger)}
           checked={s.clickPing} onChange={(v) => void update({ clickPing: v })} dim={off} />
-        {!MAC && ( // the macOS helper has no fullscreen probe yet
-          <SwitchRow icon={<Games24Regular />} title={t.gameCheck}
-            description={t.gameCheckDesc}
+        {!MAC ? (
+          <SwitchRow icon={<Games24Regular />} title={t.gameCheck} description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
-        )}
+        ) : null}
 
         <div className="section" id="toggle">{t.navToggle}</div>
         <SettingRow icon={<Keyboard24Regular />} title={t.toggleShortcut} description={t.toggleShortcutDesc}>
@@ -200,12 +225,42 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <div className="section" id="emotes">{t.navEmotes}</div>
         <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
 
-        <div className="section" id="room">{t.navRoom}</div>
-        <RoomSection settings={s} update={update} />
+        <div className="section" id="actions"><FeatureLabel isNew>{t.navActions}</FeatureLabel></div>
+        <ActionSection settings={s} update={update} />
 
-        <div className="section" id="app">{t.navApp}</div>
+        <div className="section" id="chat"><FeatureLabel isNew>{t.navChat}</FeatureLabel></div>
+        <ChatSection settings={s} update={update} onOpenRoom={() => showSection('room')} />
+
+        <div className="section" id="room">{t.navRoom}</div>
+        <RoomSection settings={s} update={update} onOpenChat={() => showSection('chat')} />
+
+        <div className="section" id="app"><FeatureLabel isNew>{t.navApp}</FeatureLabel></div>
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
           checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
+        {!MAC ? (
+          <SettingRow icon={<Cursor24Regular />} title={<FeatureLabel isNew>{t.cursorSkin}</FeatureLabel>}
+            description={(
+              <>
+                {t.cursorSkinDesc}
+                {cursorSkinError ? <span className="desc">{cursorSkinError}</span> : null}
+              </>
+            )}>
+            <RadioGroup
+              className="cursorSkinChoices"
+              layout="horizontal"
+              value={cursorSkinSchemeFromSettings(s)}
+              onChange={(_, d) => {
+                void update(cursorSkinPatchForScheme(d.value as CursorSkinScheme)).then((result) => {
+                  setCursorSkinError(result.ok ? null : result.error);
+                });
+              }}
+            >
+              <Radio value="system" label={t.cursorSkinSystem} />
+              <Radio value="modern" label={t.cursorSkinModern} />
+              <Radio value="classic" label={t.cursorSkinClassic} />
+            </RadioGroup>
+          </SettingRow>
+        ) : null}
         <SettingRow icon={<LocalLanguage24Regular />} title={t.language} description={t.languageDesc}>
           <Dropdown
             style={{ minWidth: 170 }}

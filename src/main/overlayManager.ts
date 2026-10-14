@@ -1,11 +1,14 @@
 import { BrowserWindow, ipcMain, screen, type Display, type Rectangle, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
+import { HEARTSTEEL_TARGET_HIT_RADIUS_PX, isHeartsteelTargetId, type HeartsteelCursorKind } from '../shared/heartsteel';
 import {
-  OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
+  OVERLAY_ACTIONED, OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_HEARTSTEEL_CLAIM, OVERLAY_PINGED,
+  type OverlayChannel, type OverlayEvents, type PingTag,
 } from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
+import type { LiveChatMessage } from '../shared/roomChat';
 import type { OverlaySettings } from '../shared/settings';
 import { physicalToLocal, type DisplayMap } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
@@ -22,6 +25,20 @@ export interface SharedPing {
 /** An emote the user just placed, in overlay-local CSS px: the room shares these. */
 export interface SharedEmote {
   ref: EmoteRef;
+  displayId: number;
+  x: number;
+  y: number;
+}
+
+export interface SelectedAction {
+  id: string;
+  displayId: number;
+  x: number;
+  y: number;
+}
+
+export interface HeartsteelClaim {
+  id: string;
   displayId: number;
   x: number;
   y: number;
@@ -73,6 +90,18 @@ export class OverlayManager extends EventEmitter {
       this.emit('sharedEmote', { ref: p.ref, displayId, x: p.x, y: p.y } satisfies SharedEmote);
       // The wheel's own overlay already shows it. Another display may still hold an earlier one of ours.
       this.clearElsewhere(displayId, 'self');
+    });
+    ipcMain.on(OVERLAY_ACTIONED, (event, raw: unknown) => {
+      const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
+      if (!p || typeof p.id !== 'string' || p.id.trim() === '' || !isNum(p.x) || !isNum(p.y)) return;
+      const displayId = this.displayOf(event.sender);
+      if (displayId !== undefined) this.emit('action', { id: p.id, displayId, x: p.x, y: p.y } satisfies SelectedAction);
+    });
+    ipcMain.on(OVERLAY_HEARTSTEEL_CLAIM, (event, raw: unknown) => {
+      const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
+      if (!p || !isHeartsteelTargetId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
+      const displayId = this.displayOf(event.sender);
+      if (displayId !== undefined) this.emit('heartsteelClaim', { id: p.id, displayId, x: p.x, y: p.y } satisfies HeartsteelClaim);
     });
     this.rebuild();
     screen.on('display-added', () => this.rebuild());
@@ -155,6 +184,60 @@ export class OverlayManager extends EventEmitter {
 
   toast(title: string, body: string): void {
     this.send(screen.getPrimaryDisplay().id, 'toast:show', { title, body });
+  }
+
+  spawnChatDanmaku(message: LiveChatMessage): void {
+    this.send(screen.getPrimaryDisplay().id, 'chat:spawn', {
+      id: message.id,
+      name: message.name,
+      color: message.color,
+      text: message.text,
+    });
+  }
+
+  showHeartsteelTarget(payload: { displayId: number; id: string; x: number; y: number; expiresAt: number; cursor: HeartsteelCursorKind }): void {
+    const w = this.windows.get(payload.displayId);
+    if (!w || w.isDestroyed()) return;
+    this.send(payload.displayId, 'heartsteel:target', {
+      id: payload.id,
+      x: payload.x,
+      y: payload.y,
+      expiresAt: payload.expiresAt,
+      cursor: payload.cursor,
+    });
+    const r = HEARTSTEEL_TARGET_HIT_RADIUS_PX;
+    w.setIgnoreMouseEvents(false);
+    w.setShape([{ x: Math.round(payload.x - r), y: Math.round(payload.y - r), width: r * 2, height: r * 2 }]);
+  }
+
+  clearHeartsteelTarget(id?: string): void {
+    for (const [displayId, w] of this.windows) {
+      this.send(displayId, 'heartsteel:clear', id ? { id } : null);
+      if (w.isDestroyed()) continue;
+      w.setShape([]);
+      w.setIgnoreMouseEvents(true);
+    }
+  }
+
+  showHeartsteelHit(payload: {
+    displayId: number;
+    id: string;
+    x: number;
+    y: number;
+    winnerName: string;
+    winnerColor: number;
+    damage: number;
+    bonusGain: number;
+  }): void {
+    this.send(payload.displayId, 'heartsteel:hit', {
+      id: payload.id,
+      x: payload.x,
+      y: payload.y,
+      winnerName: payload.winnerName,
+      winnerColor: payload.winnerColor,
+      damage: payload.damage,
+      bonusGain: payload.bonusGain,
+    });
   }
 
   destroy(): void {

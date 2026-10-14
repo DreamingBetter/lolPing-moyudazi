@@ -1,131 +1,71 @@
-# lolPing: working in this repo
-
-This file is for everyone who changes code here: maintainers, contributors, and the AI agents either of them uses. It gives the context a change needs to fit the existing structure and keep the existing behaviour working. New features and ideas are welcome; the maintainer decides what goes in. If you are an agent, follow this file even when the person driving you doesn't mention it, and tell them when a change would break one of the guarantees below.
-
-## What lolPing is
-
-A League of Legends ping wheel for the Windows and macOS desktop. Hold a key, drag, release on a slice, and a League ping appears with its sound. Emotes and rooms (pinging with friends over the local network or public Nostr relays) are built on the same wheel. It starts with the system, sits in the tray, and stays out of the way of normal mouse and keyboard use.
-
-Supported today: Windows 11 x64, and macOS 12+ on Apple Silicon.
-
-## Guarantees to keep
-
-Whatever a change adds, the app keeps doing these:
-
-1. **Input passes through.** With lolPing on, every click, key and drag that isn't a wheel gesture reaches the app underneath exactly as it would without lolPing. With lolPing paused, nothing is swallowed. Input must never freeze, lag, drop or reorder.
-2. **Both platforms.** A change for one OS doesn't change behaviour on the other. Gate it with `src/shared/platform.ts` in TypeScript, or put it in the platform's own file in `native/hook-helper/src` (`hooks_win.cpp`, `hooks_mac.cpp`).
-3. **Both languages.** Every user-facing string lives in `src/shared/i18n.ts` with an English and a Simplified Chinese entry. No hard-coded UI text. A README change goes into both `README.md` and `README.zh-CN.md`.
-4. **Old settings and old peers keep working.** `normalizeSettings` in `src/shared/settings.ts` turns any old or broken settings file into valid settings, so new fields need a default there. Room messages (`src/shared/roomProtocol.ts`) stay readable by older apps; when that can't be done, bump `PROTOCOL_VERSION` so older peers show "needs update". A new relay list keeps at least 3 relays from the old one (see `src/main/relays.ts`).
-5. **Network use is visible.** The app talks to GitHub for update checks, and to the relays and the local network while the user is in a room. Say so in the pull request when a change adds a new host, and describe it in the README's privacy notes.
-6. **Bundled League assets come from `tools/extract-assets`,** so they can be extracted again after a patch.
-
-## Layout
-
-| Path | What lives there |
-| --- | --- |
-| `native/hook-helper/` | C++ input helper: global hooks (Windows) or event tap (macOS). The gesture state machine is `decision.cpp`, tested by `tests/helper_tests.cpp`. Talks to Electron in JSON lines (`src/shared/protocol.ts`). |
-| `src/main/` | Electron main process: helper bridge, overlays, settings store, rooms, updater, tray |
-| `src/preload/` | The bridge each window gets. Expose only what that window needs. |
-| `src/renderer/overlay/` | The wheel and pings, plain TypeScript and DOM, no framework |
-| `src/renderer/settings/` | The settings window, React + Fluent UI v9 |
-| `src/shared/` | Pure code used by every process: settings, protocols, i18n, ping tables. No Electron or Node imports. |
-| `tests/` | Vitest tests, mirroring `src/` |
-| `site/` | The browser demo, reusing the overlay code |
-| `tools/` | Asset extraction, media capture, room and relay test tools |
-| `docs/design.md`, `docs/design-macos.md` | How it works and why. Read the part you change, and update it when behaviour changes. |
-
-Put new code where its neighbours live. A new IPC channel goes in `src/shared/ipc.ts` or `settingsChannels.ts`, a new setting in `src/shared/settings.ts`, a new string in `i18n.ts`. Reuse what's there before adding something parallel to it.
-
-## Code conventions
-
-- **Match the file you're in.** TypeScript is strict. 2-space indent, single quotes, semicolons, lines up to about 120 characters. There is no formatter, so don't reformat code you didn't change.
-- **Types:** no `any`, `@ts-ignore` or non-null assertions to quiet the compiler. Validate untrusted data (settings files, IPC, room packets, helper output) from `unknown`, the way `normalizeSettings` and `validateMessage` do.
-- **Keep logic out of the glue.** Decisions go in small pure modules that tests can call directly (`decision.cpp`, `keyCaptureLogic.ts`, `updateView.ts`, `floodGuard.ts`). Electron, DOM and OS code stays thin. Pass time in (`now: () => number`) instead of reading the clock in logic.
-- **Comments say why, not what.** One short line is usual. Exported things get a one-line `/** */` when the name doesn't say it all.
-- **Keep the diff to the change.** No drive-by renames, refactors or reformatting in the same commit. No dead code left behind.
-- **Dependencies** are pinned exactly (`npm install --save-exact`). Change `package-lock.json` only when a dependency changes.
-- **Releases are the maintainer's.** Leave `version` in `package.json` and `.github/workflows/release.yml` alone. Never commit `out/`, `release/`, `site-dist/` or helper builds.
-
-## Tests
-
-Run these before calling a change done. CI runs them on Windows and macOS, and `main` only accepts changes that pass.
-
-```bash
-npm run typecheck
-npm run test:helper
-npm test
-```
-
-- TypeScript tests live in `tests/<area>/<module>.test.ts`, mirroring `src/<area>/<module>.ts`. Native tests go in `native/hook-helper/tests/helper_tests.cpp`.
-- One `describe` per module or class, named after it. Each `it` states the behaviour in plain words: `it('caps the total even when every packet claims a different source')`.
-- New logic comes with tests. A bug fix comes with a test that fails without the fix, unless the bug is only reachable through the OS or the screen. Then say how you checked it by hand.
-- Test behaviour, not mocks. A test that only checks a mock was called doesn't test the feature.
-- Tests are deterministic: inject time, no real network (use the fakes in `tests/main/fixtures/`), no fixed sleeps (wait for the condition instead).
-- Anything about input, overlays, windows or sound needs a run of the real app (`npm run dev`) on the OS it touches. Passing tests don't prove it.
-
-## Commits and pull request titles
-
-Use [Conventional Commits](https://www.conventionalcommits.org/). Pull requests are squash-merged, so the pull request title becomes the commit on `main` and follows the same format.
-
-```
-<type>(<scope>): <what changes, imperative, lower case, no period>
-```
-
-- **Types:** `feat` (new behaviour), `fix` (bug fix), `perf`, `refactor` (no behaviour change), `test`, `docs`, `build` (packaging, dependencies), `ci`, `chore`.
-- **Scope** is optional and names the area: `helper`, `overlay`, `settings`, `rooms`, `emotes`, `updater`, `tray`, `mac`, `win`, `i18n`, `site`.
-- Examples: `fix(helper): exit when lolPing is gone, even if the hook thread is wedged`, `feat(emotes): add a size setting for the emote wheel`, `test(settings): wait for the save on disk instead of a fixed sleep`.
-- Body, when it isn't obvious: why the change is needed and how it works, wrapped at about 72 characters. Reference issues as `Fixes #9` or `Refs #9`.
-- A breaking change to settings or the room protocol gets `!` after the type and a `BREAKING CHANGE:` line in the body.
-- One logical change per commit. Code, comments, identifiers and commit messages are in English.
-
-## Writing
-
-The README, design docs and UI strings use short, plain sentences. Say what something does, not how great it is: no marketing words, no emoji, no bold lead-ins on every bullet. Keep the Chinese as plain as the English.
-
-## For AI agents
-
-- Read the files you change, their tests and the matching section of `docs/design.md` before editing. Use the existing APIs, settings keys and IPC channels instead of inventing parallel ones.
-- Follow the structure in Layout above, even when another structure seems tidier. Propose restructuring separately.
-- Don't claim something was tested unless the command was run in this session or the person says they checked it by hand. Report failing tests as failing.
-- Pull request descriptions follow `.github/pull_request_template.md`: short and true to the diff.
-
-## Project-specific product direction
+# AGENTS.md
 
 ## Project Background
 
-lolPing is an Electron + TypeScript desktop app that recreates the League of Legends ping/emote wheel on the desktop. It uses a native helper process to capture global input, transparent always-on-top overlay windows to render wheels and effects, and a Fluent UI settings window for configuration.
+lolPing-摸鱼搭子 is an Electron + TypeScript Windows desktop app that recreates the League of Legends ping/emote wheel on the desktop. It uses a native helper process to capture global input, transparent always-on-top overlay windows to render wheels and effects, and a Fluent UI settings window for configuration.
 
-The planned second-development direction is to evolve the wheel from a game-style ping/emote toy into a configurable desktop shortcut wheel for office work, desktop operations, and light entertainment.
+The planned second-development direction is to evolve the wheel from a game-style ping/emote toy into a configurable desktop shortcut wheel for office work and desktop operations.
 
 ## Current Product Direction
 
 - Keep the "hold key + drag + release on a slice" interaction as the core gesture.
+- Treat this fork as a new Windows-only app named `lolPing-摸鱼搭子`. The npm/internal package name is `lolping-moyudazi`, the Windows app id is `com.dreamingbetter.lolping.moyudazi.windows`, and release installer files use ASCII `lolPing-moyudazi-Setup-${version}.exe`.
+- The GitHub project/update source is `DreamingBetter/lolPing-moyudazi`. App update links, release notes links, `package.json` publish config, and release workflow uploads should point there rather than the original author repository.
 - Add a user-configurable action wheel for common desktop actions.
 - Preserve the existing ping/emote wheel behavior unless we explicitly decide to replace it.
 - Preserve the existing ping wheel and emote wheel, and add the action wheel alongside them rather than merging everything into one wheel.
 - Use different trigger keys to open the ping, emote, and action wheels.
 - Reuse the project's existing wheel rendering and editor patterns for the action wheel. Do not rewrite the ping/emote wheels into a new unified wheel framework for the first milestone.
-- The action wheel's trigger key is user-configurable, following the existing project pattern for ping/emote triggers. Its default trigger should be Win + drag.
-- The first action-wheel milestone is Windows-first. Desktop operations should be implemented and verified on Windows; macOS may keep compatibility hooks or show unsupported states for actions that are not implemented there yet.
+- The action wheel's trigger key is user-configurable, following the existing project pattern for ping/emote triggers. Its default trigger should be Shift + drag on Windows because Win conflicts with system shortcuts.
+- The app is Windows-only for active development and releases. macOS compatibility code may remain as legacy scaffolding, but do not add macOS release workflow, macOS installer output, or new macOS-specific product work unless the user explicitly reopens that scope.
 - The first screenshot action should invoke the Windows system snipping flow, equivalent to Win + Shift + S, rather than implementing custom screenshot capture.
 - Initial action wheel scope is:
   - Quick launch: apps, websites, files, and folders.
   - Desktop operations: screenshots, lock screen, mute/volume, show desktop, and similar system actions.
-- Ship the action wheel with a sensible default 8-slot layout:
+- Do not add dedicated "open Desktop", "open Downloads", or "open user folder" actions; users can cover those with the configurable "open folder" action.
+- Browser actions should use the system default browser. Do not open `about:blank` through Electron `shell.openExternal`, because Windows does not route the `about:` scheme through the default browser picker. Use a normal `https://` start URL for the "open browser" action and user-configured `https://` URLs for "open website".
+- Do not add a generic shortcut/hotkey action for now. It is useful but riskier because shortcuts are easy to conflict with normal app or system behavior.
+- Do not add a generic icon picker for now. Most built-in action icons are clear enough; only repeated website/app slots need stronger visual distinction.
+- Configured "open website" slots should try to use the site's favicon, and configured "open app" slots should try to use the local application's icon. Store only small generated `data:image/...` icons in action slot params, and fall back to the built-in `web` or `app` icon when extraction fails.
+- Show Desktop should use the Windows Shell `ToggleDesktop()` path rather than injecting Win + D, which can be swallowed by trigger-key state.
+- Volume up/down actions are configurable actions with a `volumeStep` that represents the intended Windows volume delta. Valid values are even numbers from 2 to 20; execution converts the delta to media-key presses by dividing by 2.
+- Volume action display names are derived from their configured delta, for example `Volume+2` / `音量+2` and `Volume-4` / `音量-4`; do not require users to edit a separate label for volume actions.
+- The action wheel overlay should show an action hint after hovering one slice for about 1.2 seconds. Pass localized action labels and descriptions from overlay settings rather than hard-coding English in the overlay.
+- Ship the action wheel with this default 8-slot layout, starting at the top and moving clockwise:
   - Screenshot
-  - Mute/unmute
-  - Show desktop
   - Lock screen
+  - Volume up
   - Open default browser
-  - Open a configurable website
-  - Open a configurable app
-  - Open a configurable folder
-- Users must be able to edit every action wheel slot.
+  - Mute/unmute
+  - Open website, configured to `https://www.baidu.com`
+  - Volume down
+  - Show desktop
+- Users must be able to edit every parameterized action wheel slot.
 - Provide more built-in action options than the default 8 so users can replace slots without needing to create everything from scratch.
-- The action wheel editor should combine drag-and-drop and parameter editing: drag actions from the built-in library onto wheel slots, and click a slot/action to edit parameters such as URL, app path, file path, or folder path.
+- The action wheel editor should combine drag-and-drop and modal parameter editing: drag actions from the built-in library onto wheel slots; actions that need details open a modal and are placed only after valid configuration. Do not use a permanent configuration panel under the wheel. Click an existing parameterized slot to edit parameters such as URL, app path, file path, folder path, or volume step.
+- Do not put generic instructional copy inside action configuration dialogs when validation and disabled save states already express the requirement. Keep these dialogs focused on the fields the user actually edits.
+- When a configurable built-in action opens in the parameter dialog, its default label should be localized to the current UI language before saving. Preserve labels the user has already customized.
+- Action library entries and wheel slots should expose a concise localized description on hover. Keep the visible label short, and make parameter requirements clear in the description.
 - The overlay should only render the action wheel and report the selected action. Execute actions in the Electron main process so opening apps/files/URLs and system operations stay behind the main-process boundary.
 - Do not add a separate entertainment wheel for now; the existing ping and emote wheels cover expressive/fun use cases.
 - Prefer a practical first milestone: one configurable action wheel with safe, obvious actions before adding advanced automation.
+- Add a Windows system-level cursor skin feature after design alignment. The user wants a 光标精灵-style cursor pack switcher rather than an overlay-only fake cursor.
+- The cursor skin feature should not support user-imported custom packs. It exposes only the bundled Summoner cursor packs from user-provided assets.
+- The settings UI for cursor skins should present one `召唤师鼠标指针` radio group instead of separate switches. The options are `系统指针`, `新版指针`, and `旧版指针`; choosing system restores the user's original Windows cursor scheme.
+- The default Summoner cursor pack is the newer `assets/cursors/summoner` pack. The optional old League cursor pack lives in `assets/cursors/summoner-classic`, is selected by the `cursorSkinClassic` setting, and only uses the bundled ASCII-named `.cur` / `.ani` files extracted from `鼠标指针.zip`'s `yxlm` folder.
+- System cursor skins should use Windows `.cur` / `.ani` files and a full cursor-role mapping. Prefer the same durable mechanism as Windows Mouse Properties/cursor pack tools: copy/install the files to a stable user-data location, write the per-user cursor scheme under `HKCU\Control Panel\Cursors`, then ask Windows to reload cursors with `SystemParametersInfo(SPI_SETCURSORS)`.
+- Avoid using `SetSystemCursor` as the primary implementation for persistent skins because it replaces in-memory system cursors directly and is harder to restore safely.
+- Before applying any cursor skin, back up the user's current cursor values and provide an obvious restore action. Cursor changes are global to the current Windows user, so failures must leave a clear recovery path.
+- The Summoner cursor switch copies bundled cursor files into `%APPDATA%\lolPing-moyudazi\cursors\summoner` before writing registry values. Keep registry paths pointed at this stable user-data copy rather than the install/build output.
+- If applying Summoner fails after a backup exists, attempt to write the backup values back immediately, but keep the backup file so the user can still turn the switch off later.
+- After writing `HKCU\Control Panel\Cursors`, refresh with `SystemParametersInfo(SPI_SETCURSORS, 0, NULL, SPIF_SENDCHANGE)`, i.e. `fWinIni = 0x0002`. Do not pass `0x0003`; including `SPIF_UPDATEINIFILE` made `SPI_SETCURSORS` return false on the user's Windows build.
+- Mark newly added settings features with a prominent red/orange `NEW` text badge in every UI language. This should usually be an eye-catching badge beside the feature title rather than an extra icon, so it does not compete with the feature's own navigation icon. If a settings section contains a new feature row, mark both the row/title and that section's side-nav tab.
+- Room chat keeps only the latest 200 in-memory messages. The chat composer placeholder should show two lines: the Enter/Shift+Enter send hint first, then the "recent 200 messages" retention hint.
+- Heartsteel gameplay is a League-inspired desktop mini-game with a global setting. It must stay visible even when the user is not in a room: idle mode runs solo on this machine, active-room mode uses synchronized room targets and claims. Each user has persistent personal Heartsteel progress: base max health is 2000, saved bonus health starts at 0, displayed stacks equal bonus health, and hits add permanent bonus health only to the clicker.
+- Heartsteel hit math is integer based: damage is `Math.round(125 + maxHealth * 0.06)`, bonus gain is `Math.round(damage * 0.1)`, and no other player's health is reduced.
+- Heartsteel target scheduling should not introduce a room-owner concept. Elect the active member with the lowest peer id as the temporary scheduler. Clickers send target claims, and only the scheduler broadcasts the final hit so all clients converge on one winner.
+- Heartsteel desktop targets should use conservative overlay hit testing. Keep normal desktop interaction click-through outside the active target, preferably with Windows `BrowserWindow.setShape()` around the target hit area.
+- Heartsteel health bars represent current health, not growth progress. Current health is full by default, so render the bar filled in green. Use LoL-like density cues: small ticks represent 100 max health and heavier ticks represent 1000 max health, so ticks become denser as max health grows.
 
 ## Development Habits
 
@@ -137,9 +77,9 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Default ongoing development should happen in one long-lived integration worktree and branch instead of creating a fresh branch/worktree for every small task. Use `.worktrees/develop` on `develop` unless the user asks otherwise.
 - Multiple Codex sessions may work on that same branch for this solo project, but each session must run `git status --short --branch` before editing, avoid concurrently editing the same files, preserve dirty changes it did not make, and commit completed slices frequently.
 - Create a separate branch/worktree only for risky experiments, release isolation, or work that is likely to conflict heavily. Delete stale worktrees/branches after confirming their changes are merged or intentionally abandoned.
-- After each development round, provide a way for the user to see the result. Prefer `npm run dev` for fast iteration; use `npm run dist` to create a Windows installer only when the user needs an installable build or release-style testing.
-- For this Electron app, rebuilding the installer is not required for every code change. Rebuild the native helper with `npm run build:helper` when helper code changes, then run the app in development mode.
-- On the action-wheel branch/worktree, `npm run dist` builds the Windows installer through `tools/build-win.mjs`, which points electron-builder at the already-installed `node_modules/electron/dist` and defaults `ELECTRON_BUILDER_BINARIES_MIRROR` to the npmmirror electron-builder-binaries mirror when no mirror is already configured. This avoids two common local Windows issues: hanging while unpacking Electron from the default cache and timing out while downloading NSIS from GitHub.
+- After each development round, run `npm run dist` so the user can test the packaged result directly. Each round should refresh both `release/lolPing-moyudazi-Setup-0.5.0.exe` and `release/win-unpacked/lolPing-摸鱼搭子.exe`.
+- For quick local investigation, `npm run dev` is still useful, but it does not replace the required final packaging step for a completed development round.
+- `npm run dist` builds the Windows installer. The script uses `tools/build-win.mjs`, which points electron-builder at the already-installed `node_modules/electron/dist` and defaults `ELECTRON_BUILDER_BINARIES_MIRROR` to the npmmirror electron-builder-binaries mirror when no mirror is already configured. This avoids two common local Windows issues: hanging while unpacking Electron from the default cache and timing out while downloading NSIS from GitHub.
 - On Windows dev machines where an installed lolPing instance has already used `%APPDATA%\lolPing`, start development with a separate Electron user-data directory to avoid cache and single-instance-lock conflicts:
   ```powershell
   $env:ELECTRON_CLI_ARGS='["--user-data-dir=C:\\Users\\DELL\\AppData\\Roaming\\lolPing-dev"]'
@@ -150,3 +90,15 @@ The planned second-development direction is to evolve the wheel from a game-styl
 ## Asset Notes
 
 New wheel actions may need icons, sounds, or short animations. Ask the user for source images when using branded app/site icons, custom office icons, or entertainment assets that should match the user's taste.
+
+Cursor skin assets:
+
+- The Summoner cursor pack from `D:\cc_workspace\lolping\Summoner.zip` was extracted into:
+  - `assets/cursors/summoner` for the main Windows cursor-role set.
+  - `assets/cursors/summoner-extra` for optional replacement/extra cursor variants.
+- `.cur` and `.ani` files are suitable for Windows system cursor schemes. Keep file names ASCII when adding bundled packs so packaging and registry paths stay predictable.
+
+Heartsteel assets:
+
+- The user provided `D:\cc_workspace\lolping\assets\心之钢效果参考图.png`, `D:\cc_workspace\lolping\assets\心之钢装备图.png`, and `D:\cc_workspace\lolping\assets\sounds\心之钢音效.mp3`. Copy them into the active develop worktree before implementation.
+- Recreate the Heartsteel target effect from the reference image with CSS/Canvas rather than using the tiny reference image directly as the visible target.

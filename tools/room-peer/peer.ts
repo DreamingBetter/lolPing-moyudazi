@@ -97,11 +97,12 @@ transport.on('packet', (from: string, data: Uint8Array) => {
   else if (msg.t === 'ping') console.log(`[in] ${msg.ping} on display ${msg.d} at ${msg.x}, ${msg.y} from ${from}`);
   else if (msg.t === 'emote') console.log(`[in] emote ${msg.e} on display ${msg.d} at ${msg.x}, ${msg.y} from ${from}`);
   else if (msg.t === 'presence') {
-    console.log(`[in] presence: ${msg.name} (${msg.status})${msg.em.length ? `, announces ${msg.em.join(', ')}` : ''}`);
+    const announced = msg.em ?? [];
+    console.log(`[in] presence: ${msg.name} (${msg.status})${announced.length ? `, announces ${announced.join(', ')}` : ''}`);
     // Answer a new member straight away, as the app does: a second room-peer on another port hears no broadcast.
     if (!values.relay && !answered.has(msg.peer)) transport.sendTo(from, presence());
     answered.add(msg.peer);
-    transfer.announced(msg.peer, msg.em);
+    transfer.announced(msg.peer, announced);
   } else {
     console.log(`[in] bye from ${msg.peer}`);
     transfer.memberGone(msg.peer);

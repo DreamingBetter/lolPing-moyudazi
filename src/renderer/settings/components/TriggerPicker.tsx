@@ -12,23 +12,25 @@ const KEYBOARD: NamedTrigger[] = keyboardTriggers(api.platform);
 
 /**
  * Fluent Dropdown (never a native <select>) with Keyboard / Mouse groups and a custom key option.
- * `offOption` adds an Off choice. `blocked` is the other trigger's key: it can't be picked here, so its option is disabled
+ * `offOption` adds an Off choice. `blocked`/`blockedList` are the other trigger keys: they can't be picked here, so their options are disabled
  * and the custom-key capture refuses it.
  */
-export function TriggerPicker({ value, onChange, offOption, blocked }: {
+export function TriggerPicker({ value, onChange, offOption, blocked, blockedList }: {
   value: EmoteTriggerKey;
   onChange(t: EmoteTriggerKey): void;
   offOption?: boolean;
   blocked?: EmoteTriggerKey;
+  blockedList?: EmoteTriggerKey[];
 }) {
   const t = useText();
   const isCustom = typeof value === 'object';
   const [choosingCustom, setChoosingCustom] = useState(false);
   const showCustom = isCustom || choosingCustom;
   const selected = showCustom ? 'custom' : (value as NamedTrigger | 'off');
-  const isBlocked = (k: NamedTrigger) => blocked !== undefined && sameTrigger(k, blocked);
-  const blockedVk = blocked === undefined ? null : triggerVk(blocked);
-  const forbiddenVks = blockedVk === null ? UNSAFE_TRIGGER_VKS : [...UNSAFE_TRIGGER_VKS, blockedVk];
+  const blockedKeys = blockedList ?? (blocked === undefined ? [] : [blocked]);
+  const isBlocked = (k: NamedTrigger) => blockedKeys.some((b) => sameTrigger(k, b));
+  const blockedVks = blockedKeys.map(triggerVk).filter((vk): vk is number => vk !== null);
+  const forbiddenVks = [...UNSAFE_TRIGGER_VKS, ...blockedVks];
 
   return (
     <>

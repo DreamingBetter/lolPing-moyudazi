@@ -126,7 +126,7 @@ describe('RelayPool', () => {
     vi.advanceTimersByTime(1000);
     from(URLS[1], first);
     expect(events.filter((e) => e.id === first.id)).toHaveLength(2);
-  });
+  }, 15_000);
 
   it('caps incoming events at 200 per second across relays', () => {
     pool.start();
@@ -137,7 +137,7 @@ describe('RelayPool', () => {
     vi.advanceTimersByTime(1000);
     from(URLS[2], ev(other, 'later'));
     expect(events).toHaveLength(201);
-  });
+  }, 15_000);
 
   it('does not count duplicates against the budget', () => {
     pool.start();

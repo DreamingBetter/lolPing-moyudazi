@@ -8,6 +8,7 @@ import { registerSettingsIpc, type SettingsIpcDeps } from '../../src/main/settin
 import { SettingsStore } from '../../src/main/settingsStore';
 import { strings } from '../../src/shared/i18n';
 import { SETTINGS_CH } from '../../src/shared/ipc';
+import type { RoomChatState } from '../../src/shared/roomChat';
 import type { UpdateState } from '../../src/shared/update';
 
 const h = vi.hoisted(() => ({
@@ -16,10 +17,14 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
+  app: { getFileIcon: vi.fn(async () => ({ isEmpty: () => false, toDataURL: () => 'data:image/png;base64,YXBw' })) },
   ipcMain: { handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => h.handlers.set(channel, fn) },
   globalShortcut: { register: () => true, unregister: () => undefined },
   shell: { openExternal: async (url: string) => void h.opened.push(url) },
-  net: {},
+  dialog: {
+    showOpenDialog: vi.fn(async (_opts: unknown) => ({ canceled: false, filePaths: ['C:\\Picked\\thing.exe'] })),
+  },
+  net: { fetch: vi.fn(async () => new Response('', { status: 404 })) },
   protocol: {},
 }));
 
@@ -34,6 +39,8 @@ const idOf = (b: Uint8Array): string => `c:${createHash('sha256').update(b).dige
 
 let store: SettingsStore;
 let library: EmoteLibrary;
+let roomApi: SettingsIpcDeps['room'];
+let shown: string[];
 const call = (channel: string, ...args: unknown[]): Promise<unknown> => Promise.resolve(h.handlers.get(channel)!({}, ...args));
 
 beforeEach(() => {
@@ -43,14 +50,31 @@ beforeEach(() => {
   store = new SettingsStore(dir, 60_000);
   store.load();
   library = new EmoteLibrary(join(dir, 'emotes'));
+  const chatState: RoomChatState = { phase: 'active', code: 'PING-12345-6789A', members: 2, messages: [] };
+  roomApi = {
+    state: vi.fn(),
+    create: vi.fn(async () => undefined),
+    join: vi.fn(async () => ({ ok: true as const })),
+    leave: vi.fn(),
+    mute: vi.fn(),
+    setHeartsteelEnabled: vi.fn(),
+    clipboardCode: vi.fn(async () => null),
+    copyCode: vi.fn(),
+    retryInternet: vi.fn(),
+    chatState: vi.fn(() => chatState),
+    sendChat: vi.fn((text: string) => ({ ok: true as const, id: text })),
+    retryChat: vi.fn((id: string) => ({ ok: true as const, id })),
+  };
+  shown = [];
   registerWith();
 });
 
-/** Registers the handlers again, with or without an update checker. */
-function registerWith(update?: SettingsIpcDeps['update']): void {
+/** Registers the handlers again, with optional feature services. */
+function registerWith(update?: SettingsIpcDeps['update'], cursorSkin?: unknown): void {
   h.handlers.clear();
   registerSettingsIpc({
-    store, library, text: () => strings('en'), platform: 'win', room: {}, update,
+    store, library, text: () => strings('en'), platform: 'win', room: roomApi,
+    showSection: (section: string) => shown.push(section), update, cursorSkin,
   } as unknown as SettingsIpcDeps);
 }
 
@@ -64,6 +88,90 @@ describe('settings IPC', () => {
 
   it('setSettings treats a patch that is not an object as no change', async () => {
     expect(await call(SETTINGS_CH.set, null)).toMatchObject({ ok: true, settings: { volume: store.get().volume } });
+  });
+
+  it('setSettings explains wheel key clashes with the shared trigger rule', async () => {
+    const result = await call(SETTINGS_CH.set, { actionTrigger: 'alt' });
+    expect(result).toMatchObject({
+      ok: false,
+      error: 'The ping trigger, emote key and action key must be different, and custom wheel keys cannot be the pause shortcut key.',
+      settings: { actionTrigger: 'shift' },
+    });
+    expect(store.get().actionTrigger).toBe('shift');
+  });
+
+  it('applies the cursor skin before saving the enabled switch', async () => {
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: true });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: true } });
+    expect(cursorSkin.applySummoner).toHaveBeenCalledWith('modern');
+    expect(cursorSkin.restoreOriginal).not.toHaveBeenCalled();
+    expect(store.get().cursorSkinEnabled).toBe(true);
+  });
+
+  it('applies the classic cursor skin when enabling with the classic option saved', async () => {
+    store.update({ cursorSkinClassic: true });
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: true });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: true, cursorSkinClassic: true } });
+    expect(cursorSkin.applySummoner).toHaveBeenCalledWith('classic');
+    expect(cursorSkin.restoreOriginal).not.toHaveBeenCalled();
+  });
+
+  it('reapplies the cursor skin when switching between modern and classic while enabled', async () => {
+    store.update({ cursorSkinEnabled: true });
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinClassic: true });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: true, cursorSkinClassic: true } });
+    expect(cursorSkin.applySummoner).toHaveBeenCalledWith('classic');
+    expect(cursorSkin.restoreOriginal).not.toHaveBeenCalled();
+  });
+
+  it('restores the cursor skin before saving the disabled switch', async () => {
+    store.update({ cursorSkinEnabled: true });
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: true as const })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: false });
+
+    expect(result).toMatchObject({ ok: true, settings: { cursorSkinEnabled: false } });
+    expect(cursorSkin.restoreOriginal).toHaveBeenCalledTimes(1);
+    expect(cursorSkin.applySummoner).not.toHaveBeenCalled();
+    expect(store.get().cursorSkinEnabled).toBe(false);
+  });
+
+  it('does not save the cursor switch when the system cursor change fails', async () => {
+    const cursorSkin = {
+      applySummoner: vi.fn(async () => ({ ok: false as const, error: 'PowerShell failed' })),
+      restoreOriginal: vi.fn(async () => ({ ok: true as const })),
+    };
+    registerWith(undefined, cursorSkin);
+
+    const result = await call(SETTINGS_CH.set, { cursorSkinEnabled: true });
+
+    expect(result).toMatchObject({ ok: false, error: 'PowerShell failed', settings: { cursorSkinEnabled: false } });
+    expect(store.get().cursorSkinEnabled).toBe(false);
   });
 
   it('imports an emote: the files are saved and the entry is added', async () => {
@@ -110,12 +218,90 @@ describe('settings IPC', () => {
     for (const raw of [null, 'facepalm', '../settings', { id: idOf(s) }]) await call(SETTINGS_CH.emoteRemove, raw);
     expect(store.get().customEmotes).toHaveLength(1);
   });
+
+  it('opens file and folder pickers', async () => {
+    expect(await call(SETTINGS_CH.pickFile)).toBe('C:\\Picked\\thing.exe');
+    expect(await call(SETTINGS_CH.pickFolder)).toBe('C:\\Picked\\thing.exe');
+  });
+
+  it('returns null when a picker is cancelled', async () => {
+    const electron = await import('electron');
+    vi.mocked(electron.dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    expect(await call(SETTINGS_CH.pickFile)).toBeNull();
+  });
+
+  it('exposes room chat state and validates chat send and retry input', async () => {
+    expect(await call(SETTINGS_CH.roomChatGet)).toEqual({ phase: 'active', code: 'PING-12345-6789A', members: 2, messages: [] });
+    expect(await call(SETTINGS_CH.roomChatSend, 'hello')).toEqual({ ok: true, id: 'hello' });
+    expect(roomApi.sendChat).toHaveBeenCalledWith('hello');
+    expect(await call(SETTINGS_CH.roomChatSend, 123)).toEqual({ ok: false, error: 'empty' });
+    expect(await call(SETTINGS_CH.roomChatRetry, '0123456789abcdef0123456789abcdef')).toEqual({ ok: true, id: '0123456789abcdef0123456789abcdef' });
+    expect(roomApi.retryChat).toHaveBeenCalledWith('0123456789abcdef0123456789abcdef');
+    expect(await call(SETTINGS_CH.roomChatRetry, null)).toEqual({ ok: false, error: 'failed' });
+  });
+
+  it('toggles the room Heartsteel game only for boolean input', async () => {
+    await call(SETTINGS_CH.roomHeartsteelSet, true);
+    expect(roomApi.setHeartsteelEnabled).toHaveBeenCalledWith(true);
+    await call(SETTINGS_CH.roomHeartsteelSet, false);
+    expect(roomApi.setHeartsteelEnabled).toHaveBeenCalledWith(false);
+    await call(SETTINGS_CH.roomHeartsteelSet, 'yes');
+    expect(roomApi.setHeartsteelEnabled).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens Chat after successful room create and join only', async () => {
+    await call(SETTINGS_CH.roomCreate);
+    expect(shown).toEqual(['chat']);
+    await call(SETTINGS_CH.roomJoin, 'code');
+    expect(shown).toEqual(['chat', 'chat']);
+    vi.mocked(roomApi.join).mockResolvedValueOnce({ ok: false, error: 'failed' });
+    await call(SETTINGS_CH.roomJoin, 'bad');
+    expect(shown).toEqual(['chat', 'chat']);
+  });
+
+  it('returns a local app icon as a data URL', async () => {
+    const electron = await import('electron');
+    const iconUrl = 'data:image/png;base64,YXBwLWljb24=';
+    vi.mocked(electron.app.getFileIcon).mockResolvedValueOnce({
+      isEmpty: () => false,
+      toDataURL: () => iconUrl,
+    } as never);
+
+    expect(await call(SETTINGS_CH.actionFileIcon, 'C:\\Tools\\tool.exe')).toBe(iconUrl);
+  });
+
+  it('returns a website favicon as a data URL', async () => {
+    const electron = await import('electron');
+    const body = Uint8Array.from([1, 2, 3]);
+    vi.mocked(electron.net.fetch).mockResolvedValueOnce(new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    }) as never);
+
+    expect(await call(SETTINGS_CH.actionUrlIcon, 'https://example.com/docs')).toBe('data:image/png;base64,AQID');
+  });
+
+  it('follows homepage icon links when the root favicon is missing', async () => {
+    const electron = await import('electron');
+    vi.mocked(electron.net.fetch)
+      .mockResolvedValueOnce(new Response('', { status: 404 }) as never)
+      .mockResolvedValueOnce(new Response('<link rel="apple-touch-icon" href="/touch.png">', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }) as never)
+      .mockResolvedValueOnce(new Response(Uint8Array.from([9, 8, 7]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }) as never);
+
+    expect(await call(SETTINGS_CH.actionUrlIcon, 'https://example.com/docs')).toBe('data:image/png;base64,CQgH');
+  });
 });
 
 describe('update IPC', () => {
-  const AVAILABLE: UpdateState = { phase: 'available', version: '0.5.1', notesUrl: 'https://github.com/darrenprx/lolPing/releases/tag/v0.5.1' };
+  const AVAILABLE: UpdateState = { phase: 'available', version: '0.5.1', notesUrl: 'https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.5.1' };
 
-  const NOTES = 'https://github.com/darrenprx/lolPing/releases/tag/v0.5.1';
+  const NOTES = 'https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.5.1';
 
   /** `notesUrl`: the release notes of the update the checker knows about, if it knows one. */
   function fakeUpdate(state: UpdateState, notesUrl: string | null = null) {
@@ -194,13 +380,13 @@ describe('update IPC', () => {
       h.opened.length = 0;
       registerWith(fakeUpdate(state, null));
       await call(SETTINGS_CH.updateOpenRelease);
-      expect(h.opened, state.phase).toEqual(['https://github.com/darrenprx/lolPing/releases/latest']);
+      expect(h.opened, state.phase).toEqual(['https://github.com/DreamingBetter/lolPing-moyudazi/releases/latest']);
     }
   });
 
   it('openReleasePage never opens a link that is not a web page', async () => {
     registerWith(fakeUpdate(AVAILABLE, 'file:///C:/Windows/System32/calc.exe'));
     await call(SETTINGS_CH.updateOpenRelease);
-    expect(h.opened).toEqual(['https://github.com/darrenprx/lolPing/releases/latest']);
+    expect(h.opened).toEqual(['https://github.com/DreamingBetter/lolPing-moyudazi/releases/latest']);
   });
 });

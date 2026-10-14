@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_ACTION_WHEEL } from '../../src/shared/actions';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from '../../src/shared/emoteCatalog';
 import { MOD } from '../../src/shared/keys';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
@@ -128,6 +129,99 @@ describe('room settings', () => {
     expect(normalizeSettings({ lastRoomCode: 3 }).lastRoomCode).toBeNull();
     const code = makeRoomCode(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]));
     expect(normalizeSettings({ lastRoomCode: formatRoomCode(code) }).lastRoomCode).toBe(code);
+  });
+
+  it('persists a normalized personal Heartsteel bonus health value', () => {
+    expect(DEFAULT_SETTINGS.heartsteelBonusHealth).toBe(0);
+    expect(normalizeSettings({}).heartsteelBonusHealth).toBe(0);
+    expect(normalizeSettings({ heartsteelBonusHealth: 42 }).heartsteelBonusHealth).toBe(42);
+    expect(normalizeSettings({ heartsteelBonusHealth: 42.8 }).heartsteelBonusHealth).toBe(43);
+    expect(normalizeSettings({ heartsteelBonusHealth: -1 }).heartsteelBonusHealth).toBe(0);
+    expect(normalizeSettings({ heartsteelBonusHealth: '99' }).heartsteelBonusHealth).toBe(0);
+  });
+
+  it('normalizes the optional desktop Heartsteel widget settings', () => {
+    expect(DEFAULT_SETTINGS.heartsteelWidgetEnabled).toBe(false);
+    expect(DEFAULT_SETTINGS.heartsteelWidgetPosition).toBeNull();
+    expect(normalizeSettings({
+      heartsteelWidgetEnabled: true,
+      heartsteelWidgetPosition: { x: 12.4, y: -3.6 },
+    })).toMatchObject({
+      heartsteelWidgetEnabled: true,
+      heartsteelWidgetPosition: { x: 12, y: -4 },
+    });
+    expect(normalizeSettings({
+      heartsteelWidgetEnabled: 'yes',
+      heartsteelWidgetPosition: { x: Number.NaN, y: 10 },
+    })).toMatchObject({
+      heartsteelWidgetEnabled: false,
+      heartsteelWidgetPosition: null,
+    });
+  });
+});
+
+describe('chat danmaku settings', () => {
+  it('has default danmaku settings', () => {
+    expect(normalizeSettings(undefined)).toMatchObject({
+      chatDanmakuEnabled: true,
+      chatDanmakuArea: 'half',
+      chatDanmakuSpeed: 'normal',
+      chatDanmakuSizePx: 24,
+      chatDanmakuOpacity: 85,
+    });
+  });
+
+  it('keeps valid danmaku settings', () => {
+    expect(normalizeSettings({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'full',
+      chatDanmakuSpeed: 'fast',
+      chatDanmakuSizePx: 36,
+      chatDanmakuOpacity: 40,
+    })).toMatchObject({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'full',
+      chatDanmakuSpeed: 'fast',
+      chatDanmakuSizePx: 36,
+      chatDanmakuOpacity: 40,
+    });
+  });
+
+  it('falls back or clamps invalid danmaku settings', () => {
+    expect(normalizeSettings({
+      chatDanmakuEnabled: 'yes',
+      chatDanmakuArea: 'bad',
+      chatDanmakuSpeed: 'warp',
+      chatDanmakuSizePx: 6,
+      chatDanmakuOpacity: 130,
+    })).toMatchObject({
+      chatDanmakuEnabled: true,
+      chatDanmakuArea: 'half',
+      chatDanmakuSpeed: 'normal',
+      chatDanmakuSizePx: 16,
+      chatDanmakuOpacity: 100,
+    });
+    expect(normalizeSettings({ chatDanmakuSizePx: 24.4, chatDanmakuOpacity: 84.6 })).toMatchObject({
+      chatDanmakuSizePx: 24,
+      chatDanmakuOpacity: 85,
+    });
+  });
+
+  it('includes danmaku settings in overlay settings', () => {
+    const s = normalizeSettings({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'quarter',
+      chatDanmakuSpeed: 'slow',
+      chatDanmakuSizePx: 18,
+      chatDanmakuOpacity: 70,
+    });
+    expect(overlaySettings(s)).toMatchObject({
+      chatDanmakuEnabled: false,
+      chatDanmakuArea: 'quarter',
+      chatDanmakuSpeed: 'slow',
+      chatDanmakuSizePx: 18,
+      chatDanmakuOpacity: 70,
+    });
   });
 });
 
@@ -260,7 +354,7 @@ describe('emote settings', () => {
 
 describe('emote key clashes', () => {
   const toggle = { mods: MOD.ctrl | MOD.alt, vk: 0x50 };
-  const current = { ...DEFAULT_SETTINGS, trigger: 'alt' as const, emoteTrigger: 'ctrl' as const };
+  const current = { ...DEFAULT_SETTINGS, trigger: 'alt' as const, emoteTrigger: 'ctrl' as const, actionTrigger: 'win' as const };
 
   it('compares triggers by name or key code', () => {
     expect(sameTrigger('alt', 'alt')).toBe(true);
@@ -334,6 +428,46 @@ describe('emote key clashes', () => {
   });
 });
 
+describe('action wheel settings', () => {
+  it('defaults to Shift and carries the default action wheel', () => {
+    const s = normalizeSettings(undefined);
+    expect(s.actionTrigger).toBe('shift');
+    expect(s.actionWheel.map((a) => a.kind)).toEqual([
+      'screenshot', 'lockScreen', 'volumeUp', 'openBrowser',
+      'muteToggle', 'openUrl', 'volumeDown', 'showDesktop',
+    ]);
+    expect(s.actionWheel[5].params).toEqual({ url: 'https://www.baidu.com' });
+  });
+
+  it('turns off an action trigger that clashes with ping or emote', () => {
+    expect(normalizeSettings({ actionTrigger: 'alt' }).actionTrigger).toBe('off');
+    expect(normalizeSettings({ actionTrigger: 'ctrl' }).actionTrigger).toBe('off');
+    expect(normalizeSettings({ trigger: 'shift', emoteTrigger: 'ctrl', actionTrigger: 'win' }).actionTrigger).toBe('win');
+  });
+
+  it('patchClashes rejects any three-wheel trigger collision', () => {
+    const current = normalizeSettings(undefined);
+    expect(patchClashes(current, { actionTrigger: 'alt' })).toBe(true);
+    expect(patchClashes(current, { actionTrigger: 'shift' })).toBe(false);
+    expect(patchClashes(current, { trigger: 'shift', actionTrigger: 'alt' })).toBe(false);
+  });
+
+  it('overlaySettings carries action slots as copies', () => {
+    const s = normalizeSettings(undefined);
+    const o = overlaySettings(s);
+    expect(o.actionWheel).toEqual(s.actionWheel);
+    expect(o.actionWheel).not.toBe(s.actionWheel);
+    expect(o.actionWheel[0]).not.toBe(s.actionWheel[0]);
+  });
+
+  it('keeps default action wheel slots isolated', () => {
+    const s = normalizeSettings(undefined);
+    expect(s.actionWheel).toEqual(DEFAULT_ACTION_WHEEL);
+    expect(s.actionWheel).not.toBe(DEFAULT_ACTION_WHEEL);
+    expect(s.actionWheel[5].params).not.toBe(DEFAULT_ACTION_WHEEL[5].params);
+  });
+});
+
 describe('mergeSettings', () => {
   it('applies a patch and re-normalizes it', () => {
     const s = mergeSettings(DEFAULT_SETTINGS, { volume: 500, tickSound: false });
@@ -390,6 +524,9 @@ describe('helpers', () => {
       pingSizePx: 110, pingDurationS: 3.2, volume: 70, muted: false, tickSound: true,
       wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
+      language: 'auto',
+      actionWheel: DEFAULT_SETTINGS.actionWheel,
+      chatDanmakuEnabled: true, chatDanmakuArea: 'half', chatDanmakuSpeed: 'normal', chatDanmakuSizePx: 24, chatDanmakuOpacity: 85,
     });
   });
 
@@ -428,5 +565,18 @@ describe('update settings', () => {
     const s = mergeSettings(DEFAULT_SETTINGS, { updateNotifiedVersion: '0.6.0', autoUpdateCheck: false });
     expect([s.autoUpdateCheck, s.updateNotifiedVersion]).toEqual([false, '0.6.0']);
     expect(mergeSettings(s, { updateNotifiedVersion: 'junk' }).updateNotifiedVersion).toBeNull();
+  });
+});
+
+describe('cursor skin settings', () => {
+  it('defaults to the modern disabled cursor skin and keeps only boolean values', () => {
+    expect(normalizeSettings(undefined).cursorSkinEnabled).toBe(false);
+    expect(normalizeSettings(undefined).cursorSkinClassic).toBe(false);
+    expect(normalizeSettings({ cursorSkinEnabled: true }).cursorSkinEnabled).toBe(true);
+    expect(normalizeSettings({ cursorSkinEnabled: false }).cursorSkinEnabled).toBe(false);
+    expect(normalizeSettings({ cursorSkinClassic: true }).cursorSkinClassic).toBe(true);
+    expect(normalizeSettings({ cursorSkinClassic: false }).cursorSkinClassic).toBe(false);
+    for (const raw of ['yes', 1, null, {}]) expect(normalizeSettings({ cursorSkinEnabled: raw }).cursorSkinEnabled).toBe(false);
+    for (const raw of ['yes', 1, null, {}]) expect(normalizeSettings({ cursorSkinClassic: raw }).cursorSkinClassic).toBe(false);
   });
 });

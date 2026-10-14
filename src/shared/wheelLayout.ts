@@ -29,6 +29,11 @@ export type WheelSource<T extends string> =
 export type WheelTarget = number | 'center';
 export type WheelPatch<T extends string> = { wheel?: T[]; center?: T };
 
+/** The target id to select for editing on a plain target click, or null while that click is placing a picked item. */
+export function clickTargetSelection<T extends string>(picked: WheelSource<T> | null, here: WheelSource<T>): T | null {
+  return picked ? null : here.id;
+}
+
 /** The change for dropping `src` on `target`, or null when nothing changes. */
 export function dropPatch<T extends string>(wheel: readonly T[], center: T, src: WheelSource<T>, target: WheelTarget): WheelPatch<T> | null {
   if (target === 'center') return src.id === center ? null : { center: src.id };

@@ -19,6 +19,12 @@ const api: OverlayApi = {
   reportEmote() {
     // nor emotes
   },
+  reportAction() {
+    // nor desktop actions
+  },
+  reportHeartsteelClaim() {
+    // nor Heartsteel claims
+  },
 };
 window.overlay = api;
 

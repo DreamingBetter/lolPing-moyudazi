@@ -1,19 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmoteArt } from '../../src/shared/emotes';
-import { OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
+import { OVERLAY_ACTIONED, OVERLAY_EMOTED, OVERLAY_HEARTSTEEL_CLAIM, OVERLAY_PINGED } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
-
-type Rect = { x: number; y: number; width: number; height: number };
 
 const h = vi.hoisted(() => ({
   windows: [] as Array<{
     x: number;
-    bounds: Rect;
-    emit: (event: string) => boolean;
+    destroyed: boolean;
     webContents: { send: ReturnType<typeof vi.fn> };
+    setShape: ReturnType<typeof vi.fn>;
+    setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
   }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
-  isMac: false,
 }));
 
 vi.mock('electron', async () => {
@@ -23,25 +21,24 @@ vi.mock('electron', async () => {
       return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
     }
     x: number;
-    bounds: Rect;
+    destroyed = false;
     webContents = Object.assign(new Emitter(), { send: vi.fn() });
-    constructor(opts: Rect) {
+    setShape = vi.fn();
+    setIgnoreMouseEvents = vi.fn();
+    constructor(opts: { x: number }) {
       super();
       this.x = opts.x;
-      this.bounds = { x: opts.x, y: opts.y, width: opts.width, height: opts.height };
       h.windows.push(this);
     }
-    setIgnoreMouseEvents(): void {}
     setAlwaysOnTop(): void {}
-    setVisibleOnAllWorkspaces(): void {}
-    setBounds(r: Rect): void {
-      this.bounds = r;
-    }
+    setBounds(): void {}
     showInactive(): void {}
     isDestroyed(): boolean {
-      return false;
+      return this.destroyed;
     }
-    destroy(): void {}
+    destroy(): void {
+      this.destroyed = true;
+    }
   }
   const displays = [
     { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
@@ -52,15 +49,13 @@ vi.mock('electron', async () => {
     getPrimaryDisplay: () => displays[0],
     dipToScreenRect: (_win: unknown, r: unknown) => r,
   });
-  screen.setMaxListeners(0); // every test starts a manager on this one fake screen
+  screen.setMaxListeners(0);
   const ipcMain = { on: (channel: string, fn: (event: unknown, raw: unknown) => void) => h.handlers.set(channel, fn) };
   return { BrowserWindow: FakeWindow, ipcMain, screen };
 });
 
 vi.mock('../../src/main/paths', () => ({
-  get IS_MAC() {
-    return h.isMac;
-  },
+  IS_MAC: false,
   loadPage: () => Promise.resolve(),
   preloadPath: () => 'preload.js',
 }));
@@ -77,7 +72,6 @@ const sent = (i: number): Array<[string, unknown]> =>
 beforeEach(async () => {
   h.windows.length = 0;
   h.handlers.clear();
-  h.isMac = false;
   vi.resetModules();
   const { OverlayManager } = await import('../../src/main/overlayManager');
   resolveArt = vi.fn(art);
@@ -106,6 +100,34 @@ describe('OverlayManager wheels', () => {
       ['wheel:open', { x: 5, y: 5, wheel: 'ping' }],
       ['wheel:move', { x: 6, y: 6, wheel: 'ping' }],
     ]);
+  });
+
+  it('forwards action wheel events and emits action reports', () => {
+    const action = vi.fn();
+    const sender = (i: number): unknown => h.windows[i].webContents;
+    mgr.on('action', action);
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'action' });
+    mgr.handle({ type: 'wheelMove', x: 110, y: 210, wheel: 'action' });
+    mgr.handle({ type: 'wheelRelease', x: 120, y: 220, wheel: 'action' });
+    expect(sent(0)).toEqual([
+      ['wheel:open', { x: 100, y: 200, wheel: 'action' }],
+      ['wheel:move', { x: 110, y: 210, wheel: 'action' }],
+      ['wheel:release', { x: 120, y: 220, wheel: 'action' }],
+    ]);
+    h.handlers.get(OVERLAY_ACTIONED)!({ sender: sender(0) }, { id: 'action-0-screenshot', x: 10, y: 20 });
+    expect(action).toHaveBeenCalledWith({ id: 'action-0-screenshot', displayId: 1, x: 10, y: 20 });
+  });
+
+  it('ignores malformed action reports', () => {
+    const action = vi.fn();
+    const sender = (i: number): unknown => h.windows[i].webContents;
+    mgr.on('action', action);
+    const report = h.handlers.get(OVERLAY_ACTIONED)!;
+    for (const raw of [null, {}, { id: '', x: 1, y: 2 }, { id: 'a', x: '1', y: 2 }, { id: 'a', x: 1, y: Number.NaN }]) {
+      report({ sender: sender(0) }, raw);
+    }
+    report({ sender: {} }, { id: 'a', x: 1, y: 2 });
+    expect(action).not.toHaveBeenCalled();
   });
 });
 
@@ -188,30 +210,38 @@ describe('OverlayManager remote and preview emotes', () => {
   });
 });
 
-describe('OverlayManager window bounds', () => {
-  it('leaves the bottom row of each display uncovered on Windows, so the taskbar does not see a full-screen app', () => {
-    for (const w of h.windows) w.emit('ready-to-show');
-    expect(h.windows.map((w) => w.bounds)).toEqual([
-      { x: 0, y: 0, width: 1920, height: 1079 },
-      { x: 1920, y: 0, width: 1280, height: 1023 },
-    ]);
+describe('OverlayManager chat danmaku', () => {
+  it('spawns chat danmaku on the primary display only', () => {
+    mgr.spawnChatDanmaku({ id: 'm1', peer: 'p1', name: 'Alex', color: 4, ts: 1, text: 'hello', self: false });
+    expect(sent(0)).toEqual([['chat:spawn', { id: 'm1', name: 'Alex', color: 4, text: 'hello' }]]);
+    expect(sent(1)).toEqual([]);
   });
 
-  it('keeps pings where they were placed, since the window still starts at the display\'s corner', () => {
-    mgr.handle({ type: 'click', x: 1920 + 300, y: 400, wheel: 'ping' });
-    expect(sent(1)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 300, y: 400 }]]);
+  it('drops chat danmaku when the primary overlay is destroyed', () => {
+    h.windows[0].destroyed = true;
+    mgr.spawnChatDanmaku({ id: 'm2', peer: 'p1', name: 'Alex', color: 4, ts: 1, text: 'dropped', self: false });
+    expect(sent(0)).toEqual([]);
+    expect(sent(1)).toEqual([]);
+  });
+});
+
+describe('OverlayManager Heartsteel targets', () => {
+  it('shows a target, opens only a small hit shape, and clears it back to click-through', () => {
+    mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
+    expect(sent(0)).toEqual([['heartsteel:target', { id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' }]]);
+    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
+
+    mgr.clearHeartsteelTarget('1'.repeat(32));
+    expect(sent(0).at(-1)).toEqual(['heartsteel:clear', { id: '1'.repeat(32) }]);
+    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
+    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
   });
 
-  it('covers the whole display on macOS', async () => {
-    h.windows.length = 0;
-    h.isMac = true;
-    vi.resetModules();
-    const { OverlayManager } = await import('../../src/main/overlayManager');
-    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
-    for (const w of h.windows) w.emit('ready-to-show');
-    expect(h.windows.map((w) => w.bounds)).toEqual([
-      { x: 0, y: 0, width: 1920, height: 1080 },
-      { x: 1920, y: 0, width: 1280, height: 1024 },
-    ]);
+  it('emits a Heartsteel claim report from the target display', () => {
+    const claim = vi.fn();
+    mgr.on('heartsteelClaim', claim);
+    h.handlers.get(OVERLAY_HEARTSTEEL_CLAIM)!({ sender: h.windows[1].webContents }, { id: '2'.repeat(32), x: 10, y: 20 });
+    expect(claim).toHaveBeenCalledWith({ id: '2'.repeat(32), displayId: 2, x: 10, y: 20 });
   });
 });

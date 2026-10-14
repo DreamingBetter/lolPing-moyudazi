@@ -1,8 +1,10 @@
+import { DEFAULT_ACTION_WHEEL, normalizeActionWheel, type ActionSlot } from './actions';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from './emoteCatalog';
 import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
+import { normalizeHeartsteelBonusHealth } from './heartsteel';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
@@ -15,9 +17,19 @@ import { isValidWheel } from './wheelLayout';
 
 export type NamedTrigger = 'alt' | 'ctrl' | 'shift' | 'win' | 'capslock' | 'mouse4' | 'mouse5';
 export type TriggerKey = NamedTrigger | { vk: number };
+export type OptionalTriggerKey = TriggerKey | 'off';
 /** The emote key is a trigger key, or 'off': then the emote wheel is off and can't be opened (nor can emote click). */
-export type EmoteTriggerKey = TriggerKey | 'off';
+export type EmoteTriggerKey = OptionalTriggerKey;
+export type ActionTriggerKey = OptionalTriggerKey;
 export const NAMED_TRIGGERS: readonly NamedTrigger[] = ['alt', 'ctrl', 'shift', 'win', 'capslock', 'mouse4', 'mouse5'];
+export const CHAT_DANMAKU_AREAS = ['quarter', 'half', 'threeQuarter', 'full'] as const;
+export type ChatDanmakuArea = typeof CHAT_DANMAKU_AREAS[number];
+export const CHAT_DANMAKU_SPEEDS = ['slow', 'normal', 'fast'] as const;
+export type ChatDanmakuSpeed = typeof CHAT_DANMAKU_SPEEDS[number];
+export interface DesktopWidgetPosition {
+  x: number;
+  y: number;
+}
 
 /** Keyboard triggers offered on each platform. macOS can't reliably stop Caps Lock from toggling, so it isn't offered. */
 export const keyboardTriggers = (platform: Platform): NamedTrigger[] =>
@@ -29,10 +41,10 @@ export interface Settings {
   trigger: TriggerKey;
   dragThresholdPx: number;
   clickPing: boolean;
+  /** Windows only: pause wheel gestures while a fullscreen app owns the clicked monitor. */
+  gameCheck: boolean;
   /** Which ping trigger + click places. */
   clickPingId: PingId;
-  /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
-  gameCheck: boolean;
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
@@ -42,6 +54,10 @@ export interface Settings {
   muted: boolean;
   tickSound: boolean;
   launchAtStartup: boolean;
+  /** Windows only: apply the bundled Summoner system cursor scheme. */
+  cursorSkinEnabled: boolean;
+  /** Windows only: use the old League cursor files instead of the default modern Summoner pack. */
+  cursorSkinClassic: boolean;
   language: LanguagePref;
   /** Shown under your pings on other people's screens. */
   displayName: string;
@@ -49,6 +65,12 @@ export interface Settings {
   tagColor: number;
   /** Pings per second accepted from each room member; 0 = unlimited. */
   incomingPingLimit: number;
+  /** Personal Heartsteel stack growth, shown as bonus max health in rooms. */
+  heartsteelBonusHealth: number;
+  /** Shows this machine's Heartsteel health and stacks in a small draggable desktop widget. */
+  heartsteelWidgetEnabled: boolean;
+  /** Last top-left position of the Heartsteel desktop widget, in Electron DIP coordinates. */
+  heartsteelWidgetPosition: DesktopWidgetPosition | null;
   allowInternet: boolean;
   rejoinRoom: boolean;
   /** Canonical code of the room to rejoin on launch. */
@@ -67,16 +89,29 @@ export interface Settings {
   customEmotes: CustomEmote[];
   /** Fetch and show room members' custom emotes. Off: nothing is fetched or served, and their images show as the placeholder. */
   friendEmotes: boolean;
+  /** Held with a click-drag to open the configurable desktop action wheel; 'off' turns it off. */
+  actionTrigger: ActionTriggerKey;
+  /** The action wheel's slots, top (N) then clockwise. */
+  actionWheel: ActionSlot[];
   /** Look for a new version on launch and every few hours. Checking by hand always works. */
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
   updateNotifiedVersion: string | null;
+  chatDanmakuEnabled: boolean;
+  chatDanmakuArea: ChatDanmakuArea;
+  chatDanmakuSpeed: ChatDanmakuSpeed;
+  chatDanmakuSizePx: number;
+  chatDanmakuOpacity: number;
 }
 
 /** Per-machine defaults for the room profile: the OS username and a random tag colour. */
 export interface Identity {
   name: string;
   color: number;
+}
+
+function cloneActionSlots(wheel: readonly ActionSlot[]): ActionSlot[] {
+  return wheel.map((a) => ({ ...a, params: a.params ? { ...a.params } : undefined }));
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -95,10 +130,15 @@ export const DEFAULT_SETTINGS: Settings = {
   muted: false,
   tickSound: true,
   launchAtStartup: false,
+  cursorSkinEnabled: false,
+  cursorSkinClassic: false,
   language: 'auto',
   displayName: 'Player',
   tagColor: 0,
   incomingPingLimit: 5,
+  heartsteelBonusHealth: 0,
+  heartsteelWidgetEnabled: false,
+  heartsteelWidgetPosition: null,
   allowInternet: true,
   rejoinRoom: true,
   lastRoomCode: null,
@@ -111,8 +151,15 @@ export const DEFAULT_SETTINGS: Settings = {
   emoteSound: true,
   customEmotes: [],
   friendEmotes: true,
+  actionTrigger: 'shift',
+  actionWheel: cloneActionSlots(DEFAULT_ACTION_WHEEL),
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
+  chatDanmakuEnabled: true,
+  chatDanmakuArea: 'half',
+  chatDanmakuSpeed: 'normal',
+  chatDanmakuSizePx: 24,
+  chatDanmakuOpacity: 85,
 };
 
 export const LIMITS = {
@@ -122,11 +169,14 @@ export const LIMITS = {
   volume: { min: 0, max: 100, step: 1 },
   incomingPingLimit: { min: 0, max: 20, step: 1 },
   emoteSizePx: { min: 80, max: 300, step: 1 },
+  chatDanmakuSizePx: { min: 16, max: 36, step: 1 },
+  chatDanmakuOpacity: { min: 40, max: 100, step: 1 },
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
-  | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck';
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'cursorSkinEnabled' | 'cursorSkinClassic'
+  | 'gameCheck' | 'allowInternet' | 'rejoinRoom' | 'roomMuted' | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck' | 'chatDanmakuEnabled'
+  | 'heartsteelWidgetEnabled';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -139,6 +189,8 @@ function num(raw: unknown, key: NumKey): number {
 }
 
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
+const enumValue = <T extends string>(raw: unknown, values: readonly T[], fallback: T): T =>
+  (typeof raw === 'string' && (values as readonly string[]).includes(raw)) ? (raw as T) : fallback;
 
 function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): TriggerKey {
   if (platform === 'mac' && raw === 'capslock') return fallback;
@@ -149,15 +201,22 @@ function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): Tri
 
 const trigger = (raw: unknown, platform: Platform): TriggerKey => triggerKey(raw, platform, DEFAULT_SETTINGS.trigger);
 
+/** An optional wheel key as stored, before the clash rules: 'off', or a trigger key with a per-wheel fallback. */
+const optionalTriggerKey = (raw: unknown, platform: Platform, fallback: TriggerKey): OptionalTriggerKey =>
+  (raw === 'off' ? 'off' : triggerKey(raw, platform, fallback));
+
 /** The emote key as stored, before the clash rules: 'off', or a trigger key with Ctrl as the fallback. */
-const emoteKey = (raw: unknown, platform: Platform): EmoteTriggerKey => (raw === 'off' ? 'off' : triggerKey(raw, platform, 'ctrl'));
+const emoteKey = (raw: unknown, platform: Platform): EmoteTriggerKey => optionalTriggerKey(raw, platform, 'ctrl');
+
+/** The action key as stored, before the clash rules: 'off', or a trigger key with Shift as the fallback. */
+const actionKey = (raw: unknown, platform: Platform): ActionTriggerKey => optionalTriggerKey(raw, platform, 'shift');
 
 /** The Caps Lock key's code: the named 'capslock' trigger and a custom { vk: 0x14 } are one physical key. */
 const CAPS_LOCK_VK = 0x14;
 /** The key code a trigger stands for when it is a custom key or Caps Lock; null for every other trigger. */
-export const triggerVk = (t: EmoteTriggerKey): number | null => (typeof t === 'object' ? t.vk : t === 'capslock' ? CAPS_LOCK_VK : null);
+export const triggerVk = (t: OptionalTriggerKey): number | null => (typeof t === 'object' ? t.vk : t === 'capslock' ? CAPS_LOCK_VK : null);
 
-export function sameTrigger(a: EmoteTriggerKey, b: EmoteTriggerKey): boolean {
+export function sameTrigger(a: OptionalTriggerKey, b: OptionalTriggerKey): boolean {
   const x = triggerVk(a);
   const y = triggerVk(b);
   return x !== null && y !== null ? x === y : a === b;
@@ -170,10 +229,29 @@ export function triggersClash(ping: TriggerKey, emote: EmoteTriggerKey, toggle: 
   return sameTrigger(ping, emote) || (vk !== null && vk === toggle.vk);
 }
 
+export function wheelTriggersClash(ping: TriggerKey, emote: EmoteTriggerKey, action: ActionTriggerKey, toggle: Hotkey): boolean {
+  const enabled = [ping, emote, action].filter((t): t is TriggerKey => t !== 'off');
+  for (let i = 0; i < enabled.length; i += 1) {
+    for (let j = i + 1; j < enabled.length; j += 1) {
+      if (sameTrigger(enabled[i], enabled[j])) return true;
+    }
+  }
+  return enabled.some((t) => {
+    const vk = triggerVk(t);
+    return vk !== null && vk === toggle.vk;
+  });
+}
+
 /** Whether applying `patch` to `current` leaves those three keys clashing, judged as normalizeSettings will read them. */
 export function patchClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
-  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey'>(k: K): unknown => (k in patch ? patch[k] : current[k]);
-  return triggersClash(trigger(pick('trigger'), platform), emoteKey(pick('emoteTrigger'), platform), hotkey(pick('toggleHotkey')));
+  const pick = <K extends 'trigger' | 'emoteTrigger' | 'actionTrigger' | 'toggleHotkey'>(k: K): unknown =>
+    (k in patch ? patch[k] : current[k]);
+  return wheelTriggersClash(
+    trigger(pick('trigger'), platform),
+    emoteKey(pick('emoteTrigger'), platform),
+    actionKey(pick('actionTrigger'), platform),
+    hotkey(pick('toggleHotkey')),
+  );
 }
 
 function hotkey(raw: unknown): Hotkey {
@@ -191,6 +269,16 @@ function roomCode(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const parsed = parseRoomCode(raw);
   return parsed.ok ? parsed.code : null;
+}
+
+function widgetPosition(raw: unknown): DesktopWidgetPosition | null {
+  if (!isObj(raw) || typeof raw.x !== 'number' || typeof raw.y !== 'number' || !Number.isFinite(raw.x) || !Number.isFinite(raw.y)) {
+    return null;
+  }
+  return {
+    x: Math.min(100_000, Math.max(-100_000, Math.round(raw.x))),
+    y: Math.min(100_000, Math.max(-100_000, Math.round(raw.y))),
+  };
 }
 
 /** Valid entries only, rebuilt field by field: well-formed unique ids, a boolean flag, a safe name; the first MAX_CUSTOM_EMOTES. */
@@ -217,6 +305,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
   const pingTrigger = trigger(r.trigger, platform);
   const toggleHotkey = hotkey(r.toggleHotkey);
   const emote = emoteKey(r.emoteTrigger, platform);
+  const normalizedEmote = triggersClash(pingTrigger, emote, toggleHotkey) ? 'off' : emote;
+  const action = actionKey(r.actionTrigger, platform);
   const custom = customEmotes(r.customEmotes);
   return {
     version: 1,
@@ -234,15 +324,20 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     muted: bool(r.muted, 'muted'),
     tickSound: bool(r.tickSound, 'tickSound'),
     launchAtStartup: bool(r.launchAtStartup, 'launchAtStartup'),
+    cursorSkinEnabled: bool(r.cursorSkinEnabled, 'cursorSkinEnabled'),
+    cursorSkinClassic: bool(r.cursorSkinClassic, 'cursorSkinClassic'),
     language: (LANGUAGE_PREFS as readonly unknown[]).includes(r.language) ? (r.language as LanguagePref) : DEFAULT_SETTINGS.language,
     displayName: typeof r.displayName === 'string' ? sanitizeName(r.displayName, fallbackName) : fallbackName,
     tagColor: isTagColor(r.tagColor) ? r.tagColor : isTagColor(identity.color) ? identity.color : 0,
     incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
+    heartsteelBonusHealth: normalizeHeartsteelBonusHealth(r.heartsteelBonusHealth),
+    heartsteelWidgetEnabled: bool(r.heartsteelWidgetEnabled, 'heartsteelWidgetEnabled'),
+    heartsteelWidgetPosition: widgetPosition(r.heartsteelWidgetPosition),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),
     roomMuted: bool(r.roomMuted, 'roomMuted'),
-    emoteTrigger: triggersClash(pingTrigger, emote, toggleHotkey) ? 'off' : emote,
+    emoteTrigger: normalizedEmote,
     emoteClick: bool(r.emoteClick, 'emoteClick'),
     emoteWheel: normalizeEmoteWheel(r.emoteWheel, custom),
     clickEmoteId: normalizeClickEmote(r.clickEmoteId, custom),
@@ -250,8 +345,15 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     emoteSound: bool(r.emoteSound, 'emoteSound'),
     customEmotes: custom,
     friendEmotes: bool(r.friendEmotes, 'friendEmotes'),
+    actionTrigger: wheelTriggersClash(pingTrigger, normalizedEmote, action, toggleHotkey) ? 'off' : action,
+    actionWheel: normalizeActionWheel(r.actionWheel),
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
+    chatDanmakuEnabled: bool(r.chatDanmakuEnabled, 'chatDanmakuEnabled'),
+    chatDanmakuArea: enumValue(r.chatDanmakuArea, CHAT_DANMAKU_AREAS, DEFAULT_SETTINGS.chatDanmakuArea),
+    chatDanmakuSpeed: enumValue(r.chatDanmakuSpeed, CHAT_DANMAKU_SPEEDS, DEFAULT_SETTINGS.chatDanmakuSpeed),
+    chatDanmakuSizePx: num(r.chatDanmakuSizePx, 'chatDanmakuSizePx'),
+    chatDanmakuOpacity: num(r.chatDanmakuOpacity, 'chatDanmakuOpacity'),
   };
 }
 
@@ -284,13 +386,19 @@ export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platfor
 
 export type OverlaySettings = Pick<
   Settings,
-  'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
+  'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'language' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
+  | 'actionWheel'
+  | 'chatDanmakuEnabled' | 'chatDanmakuArea' | 'chatDanmakuSpeed' | 'chatDanmakuSizePx' | 'chatDanmakuOpacity'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
   pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
+  language: s.language,
   wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),
+  actionWheel: cloneActionSlots(s.actionWheel),
+  chatDanmakuEnabled: s.chatDanmakuEnabled, chatDanmakuArea: s.chatDanmakuArea, chatDanmakuSpeed: s.chatDanmakuSpeed,
+  chatDanmakuSizePx: s.chatDanmakuSizePx, chatDanmakuOpacity: s.chatDanmakuOpacity,
 });

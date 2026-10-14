@@ -1,8 +1,10 @@
 import type { EmoteArt, EmoteFile, EmoteRef, ImportResult } from './emotes';
+import type { HeartsteelCursorKind } from './heartsteel';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState } from './room';
+import type { ChatSendResult, RoomChatState } from './roomChat';
 import type { OverlaySettings, Settings } from './settings';
 import type { UpdateState } from './update';
 
@@ -31,13 +33,17 @@ export interface OverlayEvents {
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
   'toast:show': { title: string; body: string };
+  'chat:spawn': { id: string; name: string; color: number; text: string };
+  'heartsteel:target': { id: string; x: number; y: number; expiresAt: number; cursor: HeartsteelCursorKind };
+  'heartsteel:clear': { id?: string } | null;
+  'heartsteel:hit': { id: string; x: number; y: number; winnerName: string; winnerColor: number; damage: number; bonusGain: number };
 }
 
 export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
-  'toast:show',
+  'toast:show', 'chat:spawn', 'heartsteel:target', 'heartsteel:clear', 'heartsteel:hit',
 ];
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
@@ -46,6 +52,10 @@ export const OVERLAY_ASSETS = 'overlay:assets';
 export const OVERLAY_PINGED = 'overlay:pinged';
 /** overlay renderer → main: {ref, x, y} of an emote the wheel just placed, so it can be shared with the room. */
 export const OVERLAY_EMOTED = 'overlay:emoted';
+/** overlay renderer → main: {id, x, y} of an action selected from the action wheel. */
+export const OVERLAY_ACTIONED = 'overlay:actioned';
+/** overlay renderer → main: {id, x, y} of a Heartsteel target right-click claim. */
+export const OVERLAY_HEARTSTEEL_CLAIM = 'overlay:heartsteelClaim';
 
 export interface AppStatus {
   enabled: boolean;
@@ -88,6 +98,10 @@ export interface SettingsApi {
   getAbout(): Promise<About>;
   openSettingsFolder(): Promise<void>;
   openProjectPage(): Promise<void>;
+  pickFile(): Promise<string | null>;
+  pickFolder(): Promise<string | null>;
+  getFileIcon(path: string): Promise<string | null>;
+  getUrlIcon(url: string): Promise<string | null>;
   retryHelper(): Promise<void>;
   setCapturing(on: boolean): Promise<void>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
@@ -99,11 +113,16 @@ export interface SettingsApi {
   joinRoom(text: string): Promise<JoinResult>;
   leaveRoom(): Promise<void>;
   muteMember(peer: string, on: boolean): Promise<void>;
+  setHeartsteelEnabled(on: boolean): Promise<void>;
   /** The room code on the clipboard, if there is one. The clipboard is read only when this is called. */
   clipboardRoomCode(): Promise<string | null>;
   copyRoomCode(): Promise<void>;
   /** Reconnects to every relay now (the Room page's Retry). */
   retryInternet(): Promise<void>;
+  getChat(): Promise<RoomChatState>;
+  onChat(cb: (state: RoomChatState) => void): () => void;
+  sendChat(text: string): Promise<ChatSendResult>;
+  retryChat(id: string): Promise<ChatSendResult>;
   /** The main process asks to scroll to a section (e.g. tray → Room settings…). */
   onShowSection(cb: (id: string) => void): () => void;
   /** Where the update checker is, or null when this build has none (a development build): then the page shows no update controls. */

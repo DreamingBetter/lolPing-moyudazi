@@ -56,6 +56,12 @@ int runSimulate(Output& out) {
       case Command::Kind::Shutdown: return 0;
       case Command::Kind::SimEvent: report(out, d.onEvent(c.event), true); break;
       case Command::Kind::SimTick: report(out, d.tick(c.timeMs), true); break;
+      case Command::Kind::InjectKeys: {
+        Result r;
+        r.injects = c.injects;
+        report(out, r, true);
+        break;
+      }
       case Command::Kind::Invalid: out.error("invalid command: " + line); break;
     }
   }
