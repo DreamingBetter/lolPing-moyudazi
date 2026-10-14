@@ -67,6 +67,7 @@ export interface SettingsIpcDeps {
     join(text: string): Promise<JoinResult>;
     leave(): void;
     mute(peer: string, on: boolean): void;
+    setHeartsteelEnabled(on: boolean): void;
     clipboardCode(): Promise<string | null>;
     copyCode(): void;
     retryInternet(): void;
@@ -189,6 +190,9 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.roomLeave, () => d.room.leave());
   ipcMain.handle(SETTINGS_CH.roomMute, (_e, peer: unknown, on: unknown) => {
     if (typeof peer === 'string') d.room.mute(peer, on === true);
+  });
+  ipcMain.handle(SETTINGS_CH.roomHeartsteelSet, (_e, on: unknown) => {
+    if (typeof on === 'boolean') d.room.setHeartsteelEnabled(on);
   });
   ipcMain.handle(SETTINGS_CH.roomClipboard, () => d.room.clipboardCode());
   ipcMain.handle(SETTINGS_CH.roomCopy, () => d.room.copyCode());

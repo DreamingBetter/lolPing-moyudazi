@@ -37,6 +37,7 @@ const api: SettingsApi = {
   joinRoom: (text) => ipcRenderer.invoke(SETTINGS_CH.roomJoin, text),
   leaveRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomLeave),
   muteMember: (peer, on) => ipcRenderer.invoke(SETTINGS_CH.roomMute, peer, on),
+  setHeartsteelEnabled: (on) => ipcRenderer.invoke(SETTINGS_CH.roomHeartsteelSet, on),
   clipboardRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomClipboard),
   copyRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomCopy),
   retryInternet: () => ipcRenderer.invoke(SETTINGS_CH.roomRetryInternet),

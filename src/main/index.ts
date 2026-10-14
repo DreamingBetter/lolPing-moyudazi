@@ -451,6 +451,7 @@ function start(): void {
       join: (t) => room.join(t),
       leave: () => room.leave(),
       mute: (peer, on) => room.muteMember(peer, on),
+      setHeartsteelEnabled: (on) => room.setHeartsteelEnabled(on),
       clipboardCode,
       copyCode: copyRoomCode,
       retryInternet: () => relay.retryNow(),

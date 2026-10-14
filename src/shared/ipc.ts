@@ -107,6 +107,7 @@ export interface SettingsApi {
   joinRoom(text: string): Promise<JoinResult>;
   leaveRoom(): Promise<void>;
   muteMember(peer: string, on: boolean): Promise<void>;
+  setHeartsteelEnabled(on: boolean): Promise<void>;
   /** The room code on the clipboard, if there is one. The clipboard is read only when this is called. */
   clipboardRoomCode(): Promise<string | null>;
   copyRoomCode(): Promise<void>;

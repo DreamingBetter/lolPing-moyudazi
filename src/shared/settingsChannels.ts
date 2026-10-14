@@ -26,6 +26,7 @@ export const SETTINGS_CH = {
   roomJoin: 'room:join',
   roomLeave: 'room:leave',
   roomMute: 'room:mute',
+  roomHeartsteelSet: 'room:heartsteelSet',
   roomClipboard: 'room:clipboardCode',
   roomCopy: 'room:copyCode',
   roomRetryInternet: 'room:retryInternet',

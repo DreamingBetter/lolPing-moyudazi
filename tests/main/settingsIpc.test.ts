@@ -57,6 +57,7 @@ beforeEach(() => {
     join: vi.fn(async () => ({ ok: true as const })),
     leave: vi.fn(),
     mute: vi.fn(),
+    setHeartsteelEnabled: vi.fn(),
     clipboardCode: vi.fn(async () => null),
     copyCode: vi.fn(),
     retryInternet: vi.fn(),
@@ -237,6 +238,15 @@ describe('settings IPC', () => {
     expect(await call(SETTINGS_CH.roomChatRetry, '0123456789abcdef0123456789abcdef')).toEqual({ ok: true, id: '0123456789abcdef0123456789abcdef' });
     expect(roomApi.retryChat).toHaveBeenCalledWith('0123456789abcdef0123456789abcdef');
     expect(await call(SETTINGS_CH.roomChatRetry, null)).toEqual({ ok: false, error: 'failed' });
+  });
+
+  it('toggles the room Heartsteel game only for boolean input', async () => {
+    await call(SETTINGS_CH.roomHeartsteelSet, true);
+    expect(roomApi.setHeartsteelEnabled).toHaveBeenCalledWith(true);
+    await call(SETTINGS_CH.roomHeartsteelSet, false);
+    expect(roomApi.setHeartsteelEnabled).toHaveBeenCalledWith(false);
+    await call(SETTINGS_CH.roomHeartsteelSet, 'yes');
+    expect(roomApi.setHeartsteelEnabled).toHaveBeenCalledTimes(2);
   });
 
   it('opens Chat after successful room create and join only', async () => {
