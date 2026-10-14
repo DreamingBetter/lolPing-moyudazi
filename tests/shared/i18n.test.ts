@@ -51,6 +51,15 @@ describe('language', () => {
     expect(strings('zh-CN').cursorSkinClassic).toBe('旧版指针');
   });
 
+  it('labels the Heartsteel room game in both languages', () => {
+    const en = strings('en');
+    const zh = strings('zh-CN');
+    expect(en.heartsteelTitle).toBe('Heartsteel');
+    expect(en.heartsteelToggle).toContain('Start');
+    expect(zh.heartsteelTitle).toBe('心之钢');
+    expect(zh.heartsteelToggle).toContain('开钢');
+  });
+
   it('describes every action in both languages', () => {
     const en = strings('en');
     const zh = strings('zh-CN');

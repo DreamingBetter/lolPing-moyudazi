@@ -1,7 +1,7 @@
 import { Button, Input, Slider, Spinner } from '@fluentui/react-components';
 import {
   ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
-  SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
+  Heart24Regular, SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useState } from 'react';
 import type { RoomMember, RoomState } from '../../../shared/room';
@@ -9,6 +9,7 @@ import { TAG_COLORS } from '../../../shared/roomColors';
 import { clampNameInput } from '../../../shared/roomProtocol';
 import { LIMITS, type Settings } from '../../../shared/settings';
 import { api } from '../api';
+import { heartsteelFillPercent, heartsteelHealthText, heartsteelStackText } from '../heartsteelView';
 import { useText } from '../text';
 import type { Update } from '../useAppState';
 import { useRoomState } from '../useRoomState';
@@ -45,6 +46,17 @@ function MemberRow({ m }: { m: RoomMember }) {
         {m.self ? <span className="desc inline">({t.roomYou})</span> : null}
         {m.noEmotes ? <span className="desc">{t.memberOldNoEmotes}</span> : null}
       </span>
+      <div className="heartsteelMember">
+        <div className="heartsteelBar" aria-label={`${t.heartsteelHealth} ${heartsteelHealthText(m.heartsteelMaxHealth)}`}>
+          <span className="heartsteelBarFill" style={{ width: `${heartsteelFillPercent(m.heartsteelMaxHealth)}%` }} />
+          <span className="heartsteelBarTicks" />
+          <span className="heartsteelBarText">{heartsteelHealthText(m.heartsteelMaxHealth)}</span>
+        </div>
+        <span className="heartsteelItem" title={`${t.heartsteelStacks}: ${heartsteelStackText(m.heartsteelBonusHealth)}`}>
+          <img src="../heartsteel/item.png" alt="" />
+          <span>{heartsteelStackText(m.heartsteelBonusHealth)}</span>
+        </span>
+      </div>
       {m.self ? null : <span className={`badge ${m.path}`}>{t.roomPath[m.path]}</span>}
       {m.status === 'paused' ? <span className="badge">{t.roomPaused}</span> : null}
       {m.status === 'muted' ? <span className="badge">{t.roomMutedBadge}</span> : null}
@@ -106,6 +118,13 @@ function InRoom({ room, allowInternet, onOpenChat }: { room: RoomState; allowInt
           </div>
         </div>
       ) : null}
+      <SwitchRow icon={<Heart24Regular />} title={(
+        <span className="featureLabel">
+          {t.heartsteelTitle}
+          <span className="desc inline">{room.heartsteel.enabled ? t.heartsteelToggleOff : t.heartsteelToggle}</span>
+        </span>
+      )} description={room.phase === 'active' ? t.heartsteelDesc : t.heartsteelNeedRoom}
+        checked={room.heartsteel.enabled} onChange={(v) => void api.setHeartsteelEnabled(v)} dim={room.phase !== 'active'} />
       <div className="card members">
         {room.members.map((m) => <MemberRow key={m.peer} m={m} />)}
         {alone ? (

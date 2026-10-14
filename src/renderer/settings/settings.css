@@ -118,6 +118,36 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .member:last-of-type { border-bottom: 0; }
 .tagDot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
 .memberName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heartsteelMember { flex: none; display: flex; align-items: center; gap: 8px; width: min(236px, 38vw); min-width: 178px; }
+.heartsteelBar {
+  position: relative; flex: 1; height: 16px; min-width: 118px; overflow: hidden; border-radius: 2px;
+  background: linear-gradient(#18202b, #080b10); border: 1px solid rgba(199, 164, 88, .52);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.05);
+}
+.heartsteelBarFill {
+  position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #d8493f 0%, #a91424 52%, #620b17 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 0 10px rgba(215, 30, 42, .35);
+}
+.heartsteelBarTicks {
+  position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 21px, rgba(9, 13, 18, .72) 21px 23px);
+  mix-blend-mode: multiply;
+}
+.heartsteelBarText {
+  position: absolute; inset: 0; display: grid; place-items: center; color: #f5dfb8;
+  font: 800 10px/16px "Segoe UI Variable Text", "Segoe UI", sans-serif; text-shadow: 0 1px 2px #000, 0 0 4px #000;
+  font-variant-numeric: tabular-nums;
+}
+.heartsteelItem {
+  position: relative; flex: none; width: 28px; height: 28px; display: block; border-radius: 3px;
+  background: #101720; border: 1px solid rgba(199, 164, 88, .68); box-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+.heartsteelItem img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px; }
+.heartsteelItem span {
+  position: absolute; right: -4px; bottom: -4px; min-width: 17px; height: 14px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 7px; background: rgba(6, 10, 16, .94); border: 1px solid rgba(245, 213, 125, .78); color: #f5d57d;
+  text-align: center; font: 800 9px/12px "Segoe UI Variable Text", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 1px #000;
+}
 .warnText { color: #ff9c48; }
 .badge { flex: none; font-size: 11px; line-height: 18px; padding: 0 7px; border-radius: 9px; border: 1px solid var(--colorNeutralStroke1); color: var(--text3); white-space: nowrap; }
 .badge.lan { color: #4caf50; border-color: rgba(76, 175, 80, .5); }
