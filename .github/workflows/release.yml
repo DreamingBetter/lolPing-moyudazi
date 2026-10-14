@@ -5,6 +5,14 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build
+        required: true
+        default: v0.6.0
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -15,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the tag matches package.json
-        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+        run: test "v$(node -p "require('./package.json').version")" = "$RELEASE_TAG"
       # A draft: installed apps look for latest.yml in the newest published release, so it must not show up before the Windows job has
       # uploaded it (every check would fail with "Cannot find latest.yml" meanwhile). The publish job at the end makes it public.
       # A draft is not found by `gh release view`, so look for the tag in the list. A re-run keeps the release it already has.
@@ -23,8 +31,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -Fx "$GITHUB_REF_NAME" > /dev/null \
-            || gh release create "$GITHUB_REF_NAME" --title "lolPing-摸鱼搭子 $GITHUB_REF_NAME" --generate-notes --draft
+          gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -Fx "$RELEASE_TAG" > /dev/null \
+            || gh release create "$RELEASE_TAG" --title "lolPing-摸鱼搭子 $RELEASE_TAG" --generate-notes --draft
 
   windows:
     needs: release
@@ -47,10 +55,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         # latest.yml and the blockmap are what electron-updater in an installed lolPing-摸鱼搭子 reads to find and fetch this version.
         run: |
-          gh release upload "$GITHUB_REF_NAME" \
-            "release/lolPing-moyudazi-Setup-${GITHUB_REF_NAME#v}.exe" \
+          gh release upload "$RELEASE_TAG" \
+            "release/lolPing-moyudazi-Setup-${RELEASE_TAG#v}.exe" \
             "release/latest.yml" \
-            "release/lolPing-moyudazi-Setup-${GITHUB_REF_NAME#v}.exe.blockmap" \
+            "release/lolPing-moyudazi-Setup-${RELEASE_TAG#v}.exe.blockmap" \
             --clobber
 
   # The installer and update files are uploaded: only now does the draft become the latest release.
@@ -62,4 +70,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: gh release edit "$RELEASE_TAG" --draft=false
