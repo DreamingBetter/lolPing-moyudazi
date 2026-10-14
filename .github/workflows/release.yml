@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag that matches package.json's version (for example v0.2.0) to build both installers and publish them.
+# Push a tag that matches package.json's version (for example v0.2.0) to build the Windows installer and publish it.
 on:
   push:
     tags: ['v*']
@@ -23,7 +23,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -Fx "$GITHUB_REF_NAME" > /dev/null \
-            || gh release create "$GITHUB_REF_NAME" --title "lolPing $GITHUB_REF_NAME" --generate-notes --draft
+            || gh release create "$GITHUB_REF_NAME" --title "lolPing-摸鱼搭子 $GITHUB_REF_NAME" --generate-notes --draft
 
   windows:
     needs: release
@@ -44,38 +44,17 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        # latest.yml and the blockmap are what electron-updater in an installed lolPing reads to find and fetch this version.
+        # latest.yml and the blockmap are what electron-updater in an installed lolPing-摸鱼搭子 reads to find and fetch this version.
         run: |
           gh release upload "$GITHUB_REF_NAME" \
-            "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe" \
+            "release/lolPing-moyudazi-Setup-${GITHUB_REF_NAME#v}.exe" \
             "release/latest.yml" \
-            "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe.blockmap" \
+            "release/lolPing-moyudazi-Setup-${GITHUB_REF_NAME#v}.exe.blockmap" \
             --clobber
 
-  mac:
-    needs: release
-    runs-on: macos-latest # Apple Silicon
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false # gh uses GH_TOKEN; nothing here pushes
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run test:helper
-      - run: npm test
-      - run: npm run dist:mac
-      - run: codesign --verify --deep --strict "release/mac-arm64/lolPing.app"
-      - name: Upload the disk image
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" "release/lolPing-${GITHUB_REF_NAME#v}-arm64.dmg" --clobber
-
-  # Both installers and the update files are uploaded: only now does the draft become the latest release.
+  # The installer and update files are uploaded: only now does the draft become the latest release.
   publish:
-    needs: [windows, mac]
+    needs: windows
     runs-on: ubuntu-latest
     steps:
       - name: Publish the release

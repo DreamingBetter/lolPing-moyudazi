@@ -2,20 +2,22 @@
 
 ## Project Background
 
-lolPing is an Electron + TypeScript desktop app that recreates the League of Legends ping/emote wheel on the desktop. It uses a native helper process to capture global input, transparent always-on-top overlay windows to render wheels and effects, and a Fluent UI settings window for configuration.
+lolPing-摸鱼搭子 is an Electron + TypeScript Windows desktop app that recreates the League of Legends ping/emote wheel on the desktop. It uses a native helper process to capture global input, transparent always-on-top overlay windows to render wheels and effects, and a Fluent UI settings window for configuration.
 
 The planned second-development direction is to evolve the wheel from a game-style ping/emote toy into a configurable desktop shortcut wheel for office work and desktop operations.
 
 ## Current Product Direction
 
 - Keep the "hold key + drag + release on a slice" interaction as the core gesture.
+- Treat this fork as a new Windows-only app named `lolPing-摸鱼搭子`. The npm/internal package name is `lolping-moyudazi-windows`, the Windows app id is `com.dreamingbetter.lolping.moyudazi.windows`, and release installer files use ASCII `lolPing-moyudazi-Setup-${version}.exe`.
+- The GitHub project/update source is `DreamingBetter/lolPing-moyudazi-Windows`. App update links, release notes links, `package.json` publish config, and release workflow uploads should point there rather than the original author repository.
 - Add a user-configurable action wheel for common desktop actions.
 - Preserve the existing ping/emote wheel behavior unless we explicitly decide to replace it.
 - Preserve the existing ping wheel and emote wheel, and add the action wheel alongside them rather than merging everything into one wheel.
 - Use different trigger keys to open the ping, emote, and action wheels.
 - Reuse the project's existing wheel rendering and editor patterns for the action wheel. Do not rewrite the ping/emote wheels into a new unified wheel framework for the first milestone.
 - The action wheel's trigger key is user-configurable, following the existing project pattern for ping/emote triggers. Its default trigger should be Shift + drag on Windows because Win conflicts with system shortcuts.
-- The first action-wheel milestone is Windows-first. Desktop operations should be implemented and verified on Windows; macOS may keep compatibility hooks or show unsupported states for actions that are not implemented there yet.
+- The app is Windows-only for active development and releases. macOS compatibility code may remain as legacy scaffolding, but do not add macOS release workflow, macOS installer output, or new macOS-specific product work unless the user explicitly reopens that scope.
 - The first screenshot action should invoke the Windows system snipping flow, equivalent to Win + Shift + S, rather than implementing custom screenshot capture.
 - Initial action wheel scope is:
   - Quick launch: apps, websites, files, and folders.
@@ -54,7 +56,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - System cursor skins should use Windows `.cur` / `.ani` files and a full cursor-role mapping. Prefer the same durable mechanism as Windows Mouse Properties/cursor pack tools: copy/install the files to a stable user-data location, write the per-user cursor scheme under `HKCU\Control Panel\Cursors`, then ask Windows to reload cursors with `SystemParametersInfo(SPI_SETCURSORS)`.
 - Avoid using `SetSystemCursor` as the primary implementation for persistent skins because it replaces in-memory system cursors directly and is harder to restore safely.
 - Before applying any cursor skin, back up the user's current cursor values and provide an obvious restore action. Cursor changes are global to the current Windows user, so failures must leave a clear recovery path.
-- The Summoner cursor switch copies bundled cursor files into `%APPDATA%\lolPing\cursors\summoner` before writing registry values. Keep registry paths pointed at this stable user-data copy rather than the install/build output.
+- The Summoner cursor switch copies bundled cursor files into `%APPDATA%\lolPing-moyudazi\cursors\summoner` before writing registry values. Keep registry paths pointed at this stable user-data copy rather than the install/build output.
 - If applying Summoner fails after a backup exists, attempt to write the backup values back immediately, but keep the backup file so the user can still turn the switch off later.
 - After writing `HKCU\Control Panel\Cursors`, refresh with `SystemParametersInfo(SPI_SETCURSORS, 0, NULL, SPIF_SENDCHANGE)`, i.e. `fWinIni = 0x0002`. Do not pass `0x0003`; including `SPIF_UPDATEINIFILE` made `SPI_SETCURSORS` return false on the user's Windows build.
 - Mark newly added settings features with a prominent red/orange `NEW` text badge in every UI language. This should usually be an eye-catching badge beside the feature title rather than an extra icon, so it does not compete with the feature's own navigation icon. If a settings section contains a new feature row, mark both the row/title and that section's side-nav tab.
@@ -69,7 +71,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Default ongoing development should happen in one long-lived integration worktree and branch instead of creating a fresh branch/worktree for every small task. Use `.worktrees/develop` on `develop` unless the user asks otherwise.
 - Multiple Codex sessions may work on that same branch for this solo project, but each session must run `git status --short --branch` before editing, avoid concurrently editing the same files, preserve dirty changes it did not make, and commit completed slices frequently.
 - Create a separate branch/worktree only for risky experiments, release isolation, or work that is likely to conflict heavily. Delete stale worktrees/branches after confirming their changes are merged or intentionally abandoned.
-- After each development round, run `npm run dist` so the user can test the packaged result directly. Each round should refresh both `release/lolPing-Setup-0.5.0.exe` and `release/win-unpacked/lolPing.exe`.
+- After each development round, run `npm run dist` so the user can test the packaged result directly. Each round should refresh both `release/lolPing-moyudazi-Setup-0.5.0.exe` and `release/win-unpacked/lolPing-摸鱼搭子.exe`.
 - For quick local investigation, `npm run dev` is still useful, but it does not replace the required final packaging step for a completed development round.
 - `npm run dist` builds the Windows installer. The script uses `tools/build-win.mjs`, which points electron-builder at the already-installed `node_modules/electron/dist` and defaults `ELECTRON_BUILDER_BINARIES_MIRROR` to the npmmirror electron-builder-binaries mirror when no mirror is already configured. This avoids two common local Windows issues: hanging while unpacking Electron from the default cache and timing out while downloading NSIS from GitHub.
 - On Windows dev machines where an installed lolPing instance has already used `%APPDATA%\lolPing`, start development with a separate Electron user-data directory to avoid cache and single-instance-lock conflicts:

@@ -12,6 +12,7 @@ import { hotkeyParts } from '../../shared/keys';
 import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, textureUrl, type PingId } from '../../shared/pings';
 import { triggerLabel, type Settings } from '../../shared/settings';
 import type { WheelPatch } from '../../shared/wheelLayout';
+import { APP_DISPLAY_NAME } from '../../shared/branding';
 import { api } from './api';
 import { AboutSection } from './components/AboutSection';
 import { ActionSection } from './components/ActionSection';
@@ -146,13 +147,13 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
     <div className="app">
       <div className="titlebar">
         <img src={textureUrl('generic_ping')} alt="" />
-        lolPing
+        {APP_DISPLAY_NAME}
       </div>
       <nav className="side">
         <div className="brand">
           <img src={textureUrl('pingwheel_basicpingrender')} alt="" />
           <div>
-            <b>lolPing</b>
+            <b>{APP_DISPLAY_NAME}</b>
             <span className="desc">{t.tagline}</span>
           </div>
         </div>

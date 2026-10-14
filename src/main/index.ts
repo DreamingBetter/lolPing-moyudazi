@@ -12,6 +12,7 @@ import type { JoinResult, RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
+import { WINDOWS_APP_ID } from '../shared/branding';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
 import { executeAction } from './actionExecutor';
 import { resolveTarget, toShared } from './displayNumbers';
@@ -37,7 +38,7 @@ import { Updater } from './updater';
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
 
 registerAppScheme();
-app.setAppUserModelId('com.lolping.app');
+app.setAppUserModelId(WINDOWS_APP_ID);
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

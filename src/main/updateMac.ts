@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { mkdir, open, rename, rm, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
+import { GITHUB_API_REPO } from '../shared/branding';
 import { isNewer, isVersion } from '../shared/update';
 import { DamagedDownloadError, type UpdateBackend, type UpdateInfo } from './updater';
 
-export const RELEASES_API = 'https://api.github.com/repos/darrenprx/lolPing';
+export const RELEASES_API = GITHUB_API_REPO;
 const API_TIMEOUT_MS = 15_000;
 
 export interface MacBackendDeps {

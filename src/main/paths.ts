@@ -1,5 +1,6 @@
 import { app, type BrowserWindow } from 'electron';
 import { join } from 'node:path';
+import { APP_DATA_DIR_NAME } from '../shared/branding';
 import { platformOf, type Platform } from '../shared/platform';
 import { APP_SCHEME } from './appProtocol';
 
@@ -25,7 +26,7 @@ export const preloadPath = (name: Page): string => join(__dirname, '../preload',
 export const assetPath = (...parts: string[]): string =>
   app.isPackaged ? join(__dirname, '../renderer', ...parts) : join(app.getAppPath(), 'assets', ...parts);
 
-export const settingsDir = (): string => join(app.getPath('appData'), 'lolPing');
+export const settingsDir = (): string => join(app.getPath('appData'), APP_DATA_DIR_NAME);
 
 /** Where `page` is served from: the Vite dev server in development, lolping://app in production. `hash` is without the #. */
 export function pageUrl(page: Page, hash = ''): string {

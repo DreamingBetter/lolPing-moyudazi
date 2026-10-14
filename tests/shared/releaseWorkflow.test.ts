@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // The release workflow cannot run here, so these checks keep its ordering from regressing: installed apps read latest.yml from the
-// newest *published* release, so the release has to stay a draft until both installers and the update files are uploaded.
+// newest *published* release, so the release has to stay a draft until the installer and update files are uploaded.
 const workflow = readFileSync(join(__dirname, '../../.github/workflows/release.yml'), 'utf8').replace(/\r\n/g, '\n');
 
 /** The text of one top-level job. */
@@ -22,33 +22,31 @@ describe('release workflow', () => {
     expect(create).toMatch(/grep -Fx "\$GITHUB_REF_NAME" > \/dev\/null/); // not -q: grep reads the whole list, so gh never gets a broken pipe
   });
 
-  it('uploads the installer, latest.yml and the blockmap from the Windows job, and the disk image from the Mac job', () => {
+  it('uploads the Windows installer, latest.yml and the blockmap', () => {
     const win = job('windows');
-    expect(win).toContain('"release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe"');
+    expect(win).toContain('"release/lolPing-moyudazi-Setup-${GITHUB_REF_NAME#v}.exe"');
     expect(win).toContain('"release/latest.yml"');
-    expect(win).toContain('"release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe.blockmap"');
+    expect(win).toContain('"release/lolPing-moyudazi-Setup-${GITHUB_REF_NAME#v}.exe.blockmap"');
     expect(win).toContain('--clobber');
-    expect(job('mac')).toContain('release/lolPing-${GITHUB_REF_NAME#v}-arm64.dmg');
+    expect(workflow).not.toContain('\n  mac:\n');
+    expect(workflow).not.toContain('dist:mac');
   });
 
-  it('publishes the draft in a last job that waits for both platform jobs', () => {
+  it('publishes the draft in a last job that waits for the Windows job', () => {
     const publish = job('publish');
-    expect(publish).toMatch(/needs: \[windows, mac\]/);
+    expect(publish).toMatch(/needs: windows/);
     expect(publish).toContain('gh release edit "$GITHUB_REF_NAME" --draft=false');
     expect(publish).toMatch(/GH_REPO: \$\{\{ github\.repository \}\}/); // no checkout in this job, so gh needs to be told the repository
   });
 
-  it('leaves no git credentials behind in the platform jobs (gh uses GH_TOKEN, and nothing there pushes)', () => {
-    for (const name of ['windows', 'mac']) {
-      const text = job(name);
-      expect(text, name).toMatch(/actions\/checkout@v7\n\s+with:\n\s+persist-credentials: false/);
-      expect(text, name).not.toMatch(/git (push|commit|tag)/);
-      expect(text, name).toContain('GH_TOKEN: ${{ github.token }}');
-    }
+  it('leaves no git credentials behind in the Windows job (gh uses GH_TOKEN, and nothing there pushes)', () => {
+    const text = job('windows');
+    expect(text).toMatch(/actions\/checkout@v7\n\s+with:\n\s+persist-credentials: false/);
+    expect(text).not.toMatch(/git (push|commit|tag)/);
+    expect(text).toContain('GH_TOKEN: ${{ github.token }}');
   });
 
-  it('never publishes from the platform jobs', () => {
+  it('never publishes from the Windows job', () => {
     expect(job('windows')).not.toContain('--draft=false');
-    expect(job('mac')).not.toContain('--draft=false');
   });
 });

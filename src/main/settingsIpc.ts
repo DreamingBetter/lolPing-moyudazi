@@ -11,13 +11,13 @@ import type { JoinResult, RoomState } from '../shared/room';
 import type { ChatSendResult, RoomChatState } from '../shared/roomChat';
 import { patchClashes, rendererPatch, type Settings } from '../shared/settings';
 import type { UpdateState } from '../shared/update';
+import { LATEST_RELEASE_URL, PROJECT_URL } from '../shared/branding';
 import type { CursorSkinResult, CursorSkinVariant } from './cursorSkin';
 import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
 import type { SettingsStore } from './settingsStore';
 
-const PROJECT_URL = 'https://github.com/darrenprx/lolPing';
 /** Where "What's new" goes when no update is known. */
-export const LATEST_RELEASE_URL = `${PROJECT_URL}/releases/latest`;
+export { LATEST_RELEASE_URL };
 const ACTION_ICON_MAX_BYTES = 100_000;
 const ACTION_ICON_HTML_MAX_BYTES = 200_000;
 const ACTION_ICON_TIMEOUT_MS = 1500;
