@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
 import {
   clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeChatText, sanitizeName, validateMessage, type ChatHistoryMsg,
-  type ChatHistoryRequestMsg, type ChatMsg, type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage,
+  type ChatHistoryRequestMsg, type ChatMsg, type EmoteMsg, type HeartsteelClaimMsg, type HeartsteelHitMsg,
+  type HeartsteelStateMsg, type HeartsteelTargetMsg, type PingMsg, type PresenceMsg, type RoomMessage,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
@@ -22,9 +23,42 @@ const history: ChatHistoryMsg = {
   total: 1,
   messages: [{ id: chat.id, peer: base.peer, ts: base.ts, name: 'Alex', color: 3, text: 'hello' }],
 };
+const heartsteelState: HeartsteelStateMsg = { ...base, t: 'heartsteelState', enabled: true };
+const heartsteelTarget: HeartsteelTargetMsg = {
+  ...base,
+  t: 'heartsteelTarget',
+  id: '11111111111111111111111111111111',
+  d: 1,
+  x: 0.25,
+  y: 0.75,
+  createdAt: base.ts,
+  expiresAt: base.ts + 2400,
+};
+const heartsteelClaim: HeartsteelClaimMsg = { ...base, t: 'heartsteelClaim', id: heartsteelTarget.id };
+const heartsteelHit: HeartsteelHitMsg = {
+  ...base,
+  t: 'heartsteelHit',
+  id: heartsteelTarget.id,
+  winner: base.peer,
+  damage: 185,
+  bonusGain: 19,
+  bonusHealth: 19,
+};
 
 describe('encode / decode', () => {
-  it.each<RoomMessage>([presence, ping, emote, chat, historyRequest, history, { ...base, t: 'bye' }])('round-trips $t', (m) => {
+  it.each<RoomMessage>([
+    presence,
+    ping,
+    emote,
+    chat,
+    historyRequest,
+    history,
+    heartsteelState,
+    heartsteelTarget,
+    heartsteelClaim,
+    heartsteelHit,
+    { ...base, t: 'bye' },
+  ])('round-trips $t', (m) => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });
 
@@ -129,6 +163,30 @@ describe('chat messages', () => {
 
   it('drops dangerous chat characters and normalises line endings', () => {
     expect(sanitizeChatText('\u0000A\u0085\u200b\u200e\u202aB\u2028C\u2029D\r\nE\rF')).toBe('ABCD\nE\nF');
+  });
+});
+
+describe('heartsteel messages', () => {
+  it('accepts optional Heartsteel bonus health on presence', () => {
+    expect(validateMessage({ ...presence, heartsteelBonusHealth: 42 })).toEqual({ ...presence, heartsteelBonusHealth: 42 });
+    expect(validateMessage({ ...presence, heartsteelBonusHealth: -1 })).toEqual(presence);
+    expect(validateMessage({ ...presence, heartsteelBonusHealth: '42' })).toEqual(presence);
+  });
+
+  it.each([
+    ['state enabled not boolean', { ...heartsteelState, enabled: 'yes' }],
+    ['target invalid id', { ...heartsteelTarget, id: 'bad' }],
+    ['target display 0', { ...heartsteelTarget, d: 0 }],
+    ['target x outside unit', { ...heartsteelTarget, x: 1.1 }],
+    ['target expires before create', { ...heartsteelTarget, expiresAt: heartsteelTarget.createdAt }],
+    ['claim invalid id', { ...heartsteelClaim, id: 'bad' }],
+    ['hit winner invalid', { ...heartsteelHit, winner: 'bad' }],
+    ['hit negative damage', { ...heartsteelHit, damage: -1 }],
+    ['hit negative bonus', { ...heartsteelHit, bonusGain: -1 }],
+    ['hit negative bonus health', { ...heartsteelHit, bonusHealth: -1 }],
+    ['hit math mismatch', { ...heartsteelHit, damage: 999 }],
+  ])('rejects %s', (_label, raw) => {
+    expect(validateMessage(raw)).toBeNull();
   });
 });
 

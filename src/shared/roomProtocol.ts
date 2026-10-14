@@ -1,4 +1,11 @@
 import { isEmoteRefShape, type EmoteRef } from './emotes';
+import {
+  HEARTSTEEL_BASE_HEALTH,
+  HEARTSTEEL_BONUS_MAX,
+  calculateHeartsteelHit,
+  isHeartsteelTargetId,
+  normalizeHeartsteelBonusHealth,
+} from './heartsteel';
 import { isPingId, type PingId } from './pings';
 import { isTagColor } from './roomColors';
 import { CHAT_TEXT_MAX_CODE_POINTS, type ChatHistoryItem } from './roomChat';
@@ -27,6 +34,7 @@ export interface PresenceMsg extends Base {
   name: string;
   color: number;
   status: MemberStatus;
+  heartsteelBonusHealth?: number;
 }
 export interface PingMsg extends Base {
   t: 'ping';
@@ -65,7 +73,43 @@ export interface ChatHistoryMsg extends Base {
   total: number;
   messages: ChatHistoryItem[];
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | ByeMsg | ChatMsg | ChatHistoryRequestMsg | ChatHistoryMsg;
+export interface HeartsteelStateMsg extends Base {
+  t: 'heartsteelState';
+  enabled: boolean;
+}
+export interface HeartsteelTargetMsg extends Base {
+  t: 'heartsteelTarget';
+  id: string;
+  d: number;
+  x: number;
+  y: number;
+  createdAt: number;
+  expiresAt: number;
+}
+export interface HeartsteelClaimMsg extends Base {
+  t: 'heartsteelClaim';
+  id: string;
+}
+export interface HeartsteelHitMsg extends Base {
+  t: 'heartsteelHit';
+  id: string;
+  winner: string;
+  damage: number;
+  bonusGain: number;
+  bonusHealth: number;
+}
+export type RoomMessage =
+  | PresenceMsg
+  | PingMsg
+  | EmoteMsg
+  | ByeMsg
+  | ChatMsg
+  | ChatHistoryRequestMsg
+  | ChatHistoryMsg
+  | HeartsteelStateMsg
+  | HeartsteelTargetMsg
+  | HeartsteelClaimMsg
+  | HeartsteelHitMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -123,7 +167,9 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       const { proto, app, name, color, status } = raw;
       if (!isUint(proto) || typeof app !== 'string' || app.length > MAX_APP_VERSION || typeof name !== 'string') return null;
       if (!isTagColor(color) || !STATUSES.includes(status as MemberStatus)) return null;
-      return { t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus };
+      const out: PresenceMsg = { t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus };
+      const bonus = normalizeHeartsteelBonusHealth(raw.heartsteelBonusHealth);
+      return bonus > 0 ? { ...out, heartsteelBonusHealth: bonus } : out;
     }
     case 'ping': {
       const { ping, d, x, y } = raw;
@@ -164,6 +210,29 @@ export function validateMessage(raw: unknown): RoomMessage | null {
         messages: messages.map(chatHistoryItem).filter((item): item is ChatHistoryItem => item !== null),
       };
     }
+    case 'heartsteelState': {
+      const { enabled } = raw;
+      return typeof enabled === 'boolean' ? { t, ...base, enabled } : null;
+    }
+    case 'heartsteelTarget': {
+      const { id, d, x, y, createdAt, expiresAt } = raw;
+      if (!isHeartsteelTargetId(id) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
+      if (!isUnit(x) || !isUnit(y) || !isUint(createdAt) || !isUint(expiresAt) || expiresAt <= createdAt) return null;
+      return { t, ...base, id, d: d as number, x, y, createdAt, expiresAt };
+    }
+    case 'heartsteelClaim': {
+      const { id } = raw;
+      return isHeartsteelTargetId(id) ? { t, ...base, id } : null;
+    }
+    case 'heartsteelHit': {
+      const { id, winner, damage, bonusGain, bonusHealth } = raw;
+      if (!isHeartsteelTargetId(id) || typeof winner !== 'string' || !/^[0-9a-f]{16}$/.test(winner)) return null;
+      if (!isUint(damage) || !isUint(bonusGain) || !isUint(bonusHealth) || bonusHealth > HEARTSTEEL_BONUS_MAX) return null;
+      const previousBonus = Math.max(0, (bonusHealth as number) - (bonusGain as number));
+      const expected = calculateHeartsteelHit(HEARTSTEEL_BASE_HEALTH + previousBonus);
+      if (expected.damage !== damage || expected.bonusGain !== bonusGain) return null;
+      return { t, ...base, id, winner, damage, bonusGain, bonusHealth };
+    }
     default:
       return null;
   }
@@ -186,7 +255,7 @@ export function isOlderThan(app: string, version: string): boolean {
 }
 
 export function encodeMessage(m: RoomMessage): Uint8Array {
-  const out = m.t === 'ping' || m.t === 'emote' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
+  const out = m.t === 'ping' || m.t === 'emote' || m.t === 'heartsteelTarget' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
   return new TextEncoder().encode(JSON.stringify(out));
 }
 

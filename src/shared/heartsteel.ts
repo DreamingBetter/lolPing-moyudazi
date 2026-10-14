@@ -9,6 +9,35 @@ export interface HeartsteelHitResult {
   bonusGain: number;
 }
 
+export type HeartsteelCursorKind = 'system' | 'modern' | 'classic';
+
+export interface HeartsteelTarget {
+  id: string;
+  d: number;
+  x: number;
+  y: number;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface HeartsteelHit {
+  id: string;
+  winner: string;
+  winnerName: string;
+  winnerColor: number;
+  damage: number;
+  bonusGain: number;
+  bonusHealth: number;
+  maxHealth: number;
+  ts: number;
+}
+
+export interface HeartsteelRoomState {
+  enabled: boolean;
+  target: HeartsteelTarget | null;
+  lastHit: HeartsteelHit | null;
+}
+
 export function normalizeHeartsteelBonusHealth(raw: unknown): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0;
   return Math.min(HEARTSTEEL_BONUS_MAX, Math.max(0, Math.round(raw)));
