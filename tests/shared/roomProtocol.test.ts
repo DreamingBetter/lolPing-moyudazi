@@ -40,9 +40,9 @@ const heartsteelHit: HeartsteelHitMsg = {
   t: 'heartsteelHit',
   id: heartsteelTarget.id,
   winner: base.peer,
-  damage: 185,
-  bonusGain: 19,
-  bonusHealth: 19,
+  damage: 245,
+  bonusGain: 25,
+  bonusHealth: 25,
 };
 
 describe('encode / decode', () => {

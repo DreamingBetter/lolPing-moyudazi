@@ -11,12 +11,12 @@ import {
 } from '../../src/shared/heartsteel';
 
 describe('heartsteel math', () => {
-  it('starts at 1000 max health and uses integer Heartsteel hit math', () => {
-    expect(HEARTSTEEL_BASE_HEALTH).toBe(1000);
-    expect(heartsteelMaxHealth(0)).toBe(1000);
+  it('starts at 2000 max health and uses integer Heartsteel hit math', () => {
+    expect(HEARTSTEEL_BASE_HEALTH).toBe(2000);
+    expect(heartsteelMaxHealth(0)).toBe(2000);
     expect(heartsteelStacks(19)).toBe(19);
-    expect(calculateHeartsteelHit(1000)).toEqual({ damage: 185, bonusGain: 19 });
-    expect(calculateHeartsteelHitFromBonus(19)).toEqual({ damage: 186, bonusGain: 19 });
+    expect(calculateHeartsteelHit(2000)).toEqual({ damage: 245, bonusGain: 25 });
+    expect(calculateHeartsteelHitFromBonus(19)).toEqual({ damage: 246, bonusGain: 25 });
   });
 
   it('normalizes saved bonus health to a safe integer stack value', () => {

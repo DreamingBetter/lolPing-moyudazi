@@ -404,6 +404,18 @@ describe('incoming emotes', () => {
 });
 
 describe('heartsteel room state', () => {
+  it('shows personal Heartsteel health while idle so solo Heartsteel is discoverable', () => {
+    const state = room.state();
+    expect(state.phase).toBe('idle');
+    expect(state.heartsteel).toEqual({ enabled: false, target: null, lastHit: null });
+    expect(state.members[0]).toMatchObject({
+      self: true,
+      name: 'Me',
+      heartsteelBonusHealth: 0,
+      heartsteelMaxHealth: 2000,
+    });
+  });
+
   it('shows personal Heartsteel health on members and starts disabled', async () => {
     profile.heartsteelBonusHealth = 57;
     await joinActive();
@@ -412,8 +424,66 @@ describe('heartsteel room state', () => {
     expect(state.members[0]).toMatchObject({
       self: true,
       heartsteelBonusHealth: 57,
-      heartsteelMaxHealth: 1057,
+      heartsteelMaxHealth: 2057,
     });
+  });
+
+  it('runs Heartsteel locally when not in a room', async () => {
+    const hits: HeartsteelHit[] = [];
+    const bonusUpdates: number[] = [];
+    room.on('heartsteelHit', (h: HeartsteelHit) => hits.push(h));
+    room.on('heartsteelBonusHealth', (n: number) => bonusUpdates.push(n));
+
+    room.setHeartsteelEnabled(true);
+    expect(room.state().phase).toBe('idle');
+    expect(room.state().heartsteel.enabled).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(heartsteelTargets).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(heartsteelTargets).toHaveLength(1);
+
+    const target = heartsteelTargets[0];
+    room.claimHeartsteelTarget(target.id);
+
+    expect(hits).toEqual([
+      expect.objectContaining({
+        id: target.id,
+        winner: SELF,
+        winnerName: 'Me',
+        winnerColor: 1,
+        damage: 245,
+        bonusGain: 25,
+        bonusHealth: 25,
+        maxHealth: 2025,
+      }),
+    ]);
+    expect(bonusUpdates).toEqual([25]);
+    expect(profile.heartsteelBonusHealth).toBe(25);
+    expect(room.state().members[0]).toMatchObject({ heartsteelBonusHealth: 25, heartsteelMaxHealth: 2025 });
+    expect(sentMessages().filter((m) => m.t.startsWith('heartsteel'))).toEqual([]);
+  });
+
+  it('returns to local Heartsteel after leaving a room while enabled', async () => {
+    await joinActive();
+    room.setHeartsteelEnabled(true);
+    room.leave();
+
+    expect(room.state()).toMatchObject({ phase: 'idle', heartsteel: { enabled: true } });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
+  });
+
+  it('clears local Heartsteel targets when quitting from idle', async () => {
+    room.setHeartsteelEnabled(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(room.state().heartsteel.target).toBeTruthy();
+
+    room.quit();
+
+    expect(room.state().heartsteel).toEqual({ enabled: false, target: null, lastHit: null });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heartsteelTargets).toHaveLength(1);
   });
 
   it('syncs the Heartsteel enabled state to room members', async () => {
@@ -481,13 +551,13 @@ describe('heartsteel room state', () => {
         winner: SELF,
         winnerName: 'Me',
         winnerColor: 1,
-        damage: 185,
-        bonusGain: 19,
-        bonusHealth: 19,
-        maxHealth: 1019,
+        damage: 245,
+        bonusGain: 25,
+        bonusHealth: 25,
+        maxHealth: 2025,
       }),
     ]);
-    expect(bonusUpdates).toEqual([19]);
+    expect(bonusUpdates).toEqual([25]);
     expect(room.state().heartsteel.target).toBeNull();
     expect(sentMessages('lan:higher').filter((m) => m.t === 'heartsteelHit')).toHaveLength(1);
 
@@ -505,8 +575,8 @@ describe('heartsteel room state', () => {
     room.claimHeartsteelTarget('22222222222222222222222222222222');
 
     expect(sentMessages('lan:lower').at(-1)).toMatchObject({ t: 'heartsteelClaim', id: '22222222222222222222222222222222' });
-    lower.hit('22222222222222222222222222222222', SELF, 185, 19, 19);
-    expect(room.state().members[0]).toMatchObject({ heartsteelBonusHealth: 19, heartsteelMaxHealth: 1019 });
+    lower.hit('22222222222222222222222222222222', SELF, 245, 25, 25);
+    expect(room.state().members[0]).toMatchObject({ heartsteelBonusHealth: 25, heartsteelMaxHealth: 2025 });
   });
 
   it('scheduler resolves the first remote claim only', async () => {
@@ -525,7 +595,7 @@ describe('heartsteel room state', () => {
     ben.claim(target.id);
 
     expect(hits).toHaveLength(1);
-    expect(hits[0]).toMatchObject({ winner: alex.peer, damage: 188, bonusGain: 19, bonusHealth: 69 });
+    expect(hits[0]).toMatchObject({ winner: alex.peer, damage: 248, bonusGain: 25, bonusHealth: 75 });
     expect(sentMessages('lan:alex').filter((m) => m.t === 'heartsteelHit')).toHaveLength(1);
   });
 });
@@ -619,7 +689,11 @@ describe('outgoing', () => {
     expect(sentMessages('*').map((m) => m.t)).toEqual(['bye']);
     expect(lan.started).toBeNull();
     expect(saved.at(-1)).toBeNull();
-    expect(room.state()).toMatchObject({ phase: 'idle', code: null, members: [] });
+    expect(room.state()).toMatchObject({
+      phase: 'idle',
+      code: null,
+      members: [expect.objectContaining({ self: true, heartsteelMaxHealth: 2000 })],
+    });
 
     await joinActive();
     const before = saved.length;

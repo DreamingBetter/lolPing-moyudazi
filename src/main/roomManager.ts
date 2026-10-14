@@ -166,6 +166,7 @@ export class RoomManager extends EventEmitter {
   private heartsteelLastHit: HeartsteelHit | null = null;
   private nextHeartsteelSpawnAt = 0;
   private heartsteelExpire: NodeJS.Timeout | null = null;
+  private localHeartsteelTicker: NodeJS.Timeout | null = null;
   private readonly resolvedHeartsteelTargets = new Set<string>();
   /** A presence waiting out SHARED_PRESENCE_MS, per shared transport. */
   private readonly sharedTimers = new Map<Transport, NodeJS.Timeout>();
@@ -204,13 +205,14 @@ export class RoomManager extends EventEmitter {
   /** Leaves the room and forgets it, so it isn't rejoined on the next launch. */
   leave(): void {
     if (this.phase === 'idle') return;
-    this.stop();
+    this.stop({ keepHeartsteelEnabled: this.heartsteelEnabled });
     this.emit('saveCode', null);
   }
 
   /** Says bye on the way out, but keeps the code for "rejoin last room". */
   quit(): void {
-    if (this.phase !== 'idle') this.stop();
+    if (this.phase !== 'idle') this.stop({ keepHeartsteelEnabled: false });
+    else this.resetHeartsteel(true);
   }
 
   sendPing(ping: PingId, shared: { d: number; x: number; y: number }): void {
@@ -222,11 +224,19 @@ export class RoomManager extends EventEmitter {
   }
 
   setHeartsteelEnabled(on: boolean): void {
-    if (this.phase !== 'active' || on === this.heartsteelEnabled) return;
+    if (on === this.heartsteelEnabled) return;
     this.heartsteelEnabled = on;
-    if (on) this.nextHeartsteelSpawnAt = this.deps.now() + HEARTSTEEL_TARGET_INTERVAL_MS;
-    else this.clearHeartsteelTarget(null);
-    this.sendShared({ t: 'heartsteelState', enabled: on }, { respectPause: false, useRelayCap: false });
+    if (on) {
+      this.nextHeartsteelSpawnAt = this.deps.now() + HEARTSTEEL_TARGET_INTERVAL_MS;
+      this.startLocalHeartsteelTicker();
+    } else {
+      this.stopLocalHeartsteelTicker();
+      this.nextHeartsteelSpawnAt = 0;
+      this.clearHeartsteelTarget(null);
+    }
+    if (this.phase === 'active') {
+      this.sendShared({ t: 'heartsteelState', enabled: on }, { respectPause: false, useRelayCap: false });
+    }
     this.emitState();
   }
 
@@ -324,27 +334,30 @@ export class RoomManager extends EventEmitter {
       this.phase === 'idle' ? 'off' : ([...this.active].find((t) => t.kind === kind)?.status ?? 'off');
     const p = this.deps.profile();
     const selfBonus = normalizeHeartsteelBonusHealth(p.heartsteelBonusHealth);
-    const members: RoomMember[] = this.phase === 'idle' ? [] : [
-      {
-        peer: this.self,
-        name: p.name,
-        color: p.color,
-        path: 'lan',
-        status: this.status(),
-        needsUpdate: false,
-        noEmotes: false,
-        muted: false,
-        heartsteelBonusHealth: selfBonus,
-        heartsteelMaxHealth: heartsteelMaxHealth(selfBonus),
-        self: true,
-      },
-      ...[...this.members.values()].map((m) => ({
-        peer: m.peer, name: m.name, color: m.color, path: this.path(m, now), status: m.status,
-        needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, muted: m.muted,
-        heartsteelBonusHealth: m.heartsteelBonusHealth,
-        heartsteelMaxHealth: heartsteelMaxHealth(m.heartsteelBonusHealth),
-        self: false,
-      })),
+    const self: RoomMember = {
+      peer: this.self,
+      name: p.name,
+      color: p.color,
+      path: 'lan',
+      status: this.status(),
+      needsUpdate: false,
+      noEmotes: false,
+      muted: false,
+      heartsteelBonusHealth: selfBonus,
+      heartsteelMaxHealth: heartsteelMaxHealth(selfBonus),
+      self: true,
+    };
+    const members: RoomMember[] = [
+      self,
+      ...(this.phase === 'idle' ? [] : [
+        ...[...this.members.values()].map((m) => ({
+          peer: m.peer, name: m.name, color: m.color, path: this.path(m, now), status: m.status,
+          needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, muted: m.muted,
+          heartsteelBonusHealth: m.heartsteelBonusHealth,
+          heartsteelMaxHealth: heartsteelMaxHealth(m.heartsteelBonusHealth),
+          self: false,
+        })),
+      ]),
     ];
     return {
       phase: this.phase,
@@ -415,11 +428,12 @@ export class RoomManager extends EventEmitter {
   /** False when the keys couldn't be derived: the room is back to idle. */
   private async start(code: string): Promise<boolean> {
     if (this.phase !== 'idle') this.leave();
+    const keepHeartsteelEnabled = this.heartsteelEnabled;
     const session = ++this.session;
     this.self = toHex(this.deps.randomBytes(8));
     this.seq = 0;
     this.clearChat();
-    this.resetHeartsteel(false);
+    this.resetHeartsteel(true, keepHeartsteelEnabled);
     this.phase = 'joining';
     this.code = code;
     this.guard = new ReplayGuard(this.deps.now);
@@ -430,7 +444,7 @@ export class RoomManager extends EventEmitter {
     try {
       keys = await this.deps.deriveKeys(code);
     } catch {
-      if (session === this.session) this.stop();
+      if (session === this.session) this.stop({ keepHeartsteelEnabled });
       return false;
     }
     if (session !== this.session) return true; // left while deriving
@@ -467,13 +481,17 @@ export class RoomManager extends EventEmitter {
       return;
     }
     this.phase = 'active';
+    if (this.heartsteelEnabled) {
+      this.nextHeartsteelSpawnAt = this.deps.now() + HEARTSTEEL_TARGET_INTERVAL_MS;
+      this.sendShared({ t: 'heartsteelState', enabled: true }, { respectPause: false, useRelayCap: false });
+    }
     this.emit('saveCode', this.code);
     this.emit('toast', { kind: 'joinedRoom', code: formatRoomCode(this.code!) } satisfies RoomToast);
     this.emitState();
     this.emitChatState();
   }
 
-  private stop(): void {
+  private stop(options: { keepHeartsteelEnabled: boolean } = { keepHeartsteelEnabled: false }): void {
     this.session++;
     if (this.keys) {
       const bye = this.seal({ t: 'bye' });
@@ -493,7 +511,8 @@ export class RoomManager extends EventEmitter {
     this.lastPresence = {};
     this.aloneSince = null;
     this.clearChat();
-    this.resetHeartsteel(true);
+    this.resetHeartsteel(true, options.keepHeartsteelEnabled);
+    this.startLocalHeartsteelTicker();
     this.emitState();
     this.emitChatState();
   }
@@ -844,13 +863,14 @@ export class RoomManager extends EventEmitter {
   }
 
   private tickHeartsteel(now: number): void {
-    if (this.phase !== 'active' || !this.heartsteelEnabled) return;
+    if (!this.heartsteelEnabled || this.phase === 'joining') return;
     if (this.heartsteelTarget && now >= this.heartsteelTarget.expiresAt) this.expireHeartsteelTarget(this.heartsteelTarget.id);
-    if (this.heartsteelTarget || !this.isHeartsteelScheduler()) return;
+    if (this.heartsteelTarget || (this.phase === 'active' && !this.isHeartsteelScheduler())) return;
     if (this.nextHeartsteelSpawnAt === 0) this.nextHeartsteelSpawnAt = now + HEARTSTEEL_TARGET_INTERVAL_MS;
     if (now < this.nextHeartsteelSpawnAt) return;
     const target = this.newHeartsteelTarget(now);
-    this.publishHeartsteelTarget(target);
+    if (this.phase === 'active') this.publishHeartsteelTarget(target);
+    else this.setHeartsteelTarget(target);
   }
 
   private receiveHeartsteelState(enabled: boolean): void {
@@ -967,13 +987,28 @@ export class RoomManager extends EventEmitter {
     this.heartsteelExpire = null;
   }
 
-  private resetHeartsteel(emitClear: boolean): void {
+  private startLocalHeartsteelTicker(): void {
+    if (!this.heartsteelEnabled || this.phase !== 'idle' || this.localHeartsteelTicker) return;
+    if (this.nextHeartsteelSpawnAt === 0) this.nextHeartsteelSpawnAt = this.deps.now() + HEARTSTEEL_TARGET_INTERVAL_MS;
+    this.localHeartsteelTicker = setInterval(() => {
+      this.tickHeartsteel(this.deps.now());
+      this.emitState();
+    }, TICK_MS);
+  }
+
+  private stopLocalHeartsteelTicker(): void {
+    if (this.localHeartsteelTicker) clearInterval(this.localHeartsteelTicker);
+    this.localHeartsteelTicker = null;
+  }
+
+  private resetHeartsteel(emitClear: boolean, keepEnabled = false): void {
+    this.stopLocalHeartsteelTicker();
     this.clearHeartsteelExpiry();
     const hadTarget = this.heartsteelTarget !== null;
-    this.heartsteelEnabled = false;
+    this.heartsteelEnabled = keepEnabled;
     this.heartsteelTarget = null;
     this.heartsteelLastHit = null;
-    this.nextHeartsteelSpawnAt = 0;
+    this.nextHeartsteelSpawnAt = keepEnabled ? this.deps.now() + HEARTSTEEL_TARGET_INTERVAL_MS : 0;
     this.resolvedHeartsteelTargets.clear();
     if (emitClear && hadTarget) this.emit('heartsteelClear', null);
   }
