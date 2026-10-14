@@ -24,6 +24,7 @@ import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
 import { OverlayManager, type SelectedAction, type SharedEmote, type SharedPing } from './overlayManager';
+import { HeartsteelWidgetWindow } from './heartsteelWidgetWindow';
 import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
@@ -178,6 +179,9 @@ function start(): void {
       }),
     };
   };
+  const heartsteelWidget = new HeartsteelWidgetWindow((heartsteelWidgetPosition) => {
+    store.update({ heartsteelWidgetPosition });
+  });
   const clipboardCode = async (): Promise<string | null> => {
     // Strict: nobody typed this, so only an unmistakable code counts, never words that happen to pass the check.
     const parsed = parseRoomCode(await clipboard.readText().catch(() => ''), { strict: true });
@@ -282,6 +286,7 @@ function start(): void {
     const s = roomState();
     tray.setRoom({ code: s.code, count: s.members.length, muted: settings.roomMuted });
     sendToSettings(SETTINGS_CH.roomChanged, s);
+    heartsteelWidget.setRoom(s);
   }
   function pushChat(): void {
     if (quitting) return;
@@ -432,6 +437,7 @@ function start(): void {
     settings = s;
     bridge.send(configCommand(s, enabled));
     overlays.updateSettings(overlaySettings(s));
+    heartsteelWidget.setSettings(s);
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
     if (
@@ -504,6 +510,7 @@ function start(): void {
   });
 
   bridge.send(configCommand(settings, enabled));
+  heartsteelWidget.setSettings(settings);
   if (trusted()) bridge.start();
   else waitForAccess();
   pushStatus();
@@ -534,6 +541,7 @@ function start(): void {
     stopWaitingForAccess();
     tray.destroy();
     overlays.destroy();
+    heartsteelWidget.destroy();
     void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed()]).then(() => app.exit(0));
   });
 }

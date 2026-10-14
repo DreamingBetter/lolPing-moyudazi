@@ -134,6 +134,25 @@ describe('room settings', () => {
     expect(normalizeSettings({ heartsteelBonusHealth: -1 }).heartsteelBonusHealth).toBe(0);
     expect(normalizeSettings({ heartsteelBonusHealth: '99' }).heartsteelBonusHealth).toBe(0);
   });
+
+  it('normalizes the optional desktop Heartsteel widget settings', () => {
+    expect(DEFAULT_SETTINGS.heartsteelWidgetEnabled).toBe(false);
+    expect(DEFAULT_SETTINGS.heartsteelWidgetPosition).toBeNull();
+    expect(normalizeSettings({
+      heartsteelWidgetEnabled: true,
+      heartsteelWidgetPosition: { x: 12.4, y: -3.6 },
+    })).toMatchObject({
+      heartsteelWidgetEnabled: true,
+      heartsteelWidgetPosition: { x: 12, y: -4 },
+    });
+    expect(normalizeSettings({
+      heartsteelWidgetEnabled: 'yes',
+      heartsteelWidgetPosition: { x: Number.NaN, y: 10 },
+    })).toMatchObject({
+      heartsteelWidgetEnabled: false,
+      heartsteelWidgetPosition: null,
+    });
+  });
 });
 
 describe('chat danmaku settings', () => {

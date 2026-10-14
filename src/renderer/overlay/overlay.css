@@ -155,7 +155,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   -webkit-text-stroke: 1px rgba(48, 12, 18, .9);
 }
 .heartsteelHit span {
-  color: #f04a56; font: 900 18px/1.1 "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--heartsteel-bonus-color, #49d86a); font: 900 18px/1.1 "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .heartsteelHit small {
   max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

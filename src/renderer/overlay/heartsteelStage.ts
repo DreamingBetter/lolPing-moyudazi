@@ -1,6 +1,8 @@
 import type { HeartsteelCursorKind } from '../../shared/heartsteel';
 import { TAG_COLORS } from '../../shared/roomColors';
 
+export const HEARTSTEEL_BONUS_COLOR = '#49d86a';
+
 export interface HeartsteelSound {
   play(key: string, volume01: number): void;
 }
@@ -33,6 +35,7 @@ export class HeartsteelStage {
     private readonly report: (id: string, x: number, y: number) => void,
     private readonly sound: HeartsteelSound,
     private readonly volume: () => number = () => 1,
+    private readonly soundGain = 1,
   ) {}
 
   showTarget(target: HeartsteelTargetView): void {
@@ -71,15 +74,17 @@ export class HeartsteelStage {
 
   showHit(hit: HeartsteelHitView): void {
     this.clear(hit.id);
-    this.sound.play('heartsteel', this.volume());
+    this.sound.play('heartsteel', Math.min(1, Math.max(0, this.volume() * this.soundGain)));
     const el = document.createElement('div');
     el.className = 'heartsteelHit';
     el.style.left = `${Math.round(hit.x)}px`;
     el.style.top = `${Math.round(hit.y)}px`;
     el.style.setProperty('--tag-color', TAG_COLORS[hit.winnerColor] ?? TAG_COLORS[0]);
+    el.style.setProperty('--heartsteel-bonus-color', HEARTSTEEL_BONUS_COLOR);
     const damage = document.createElement('b');
     damage.textContent = String(hit.damage);
     const bonus = document.createElement('span');
+    bonus.className = 'heartsteelBonus';
     bonus.textContent = `+${hit.bonusGain}`;
     const name = document.createElement('small');
     name.textContent = hit.winnerName;

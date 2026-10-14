@@ -54,7 +54,7 @@ function HeartsteelStats({ m }: { m: Pick<RoomMember, 'heartsteelBonusHealth' | 
   );
 }
 
-function HeartsteelRow({ room }: { room: RoomState }) {
+function HeartsteelRow({ room, settings: s, update }: { room: RoomState; settings: Settings; update: Update }) {
   const t = useText();
   const self = room.members.find((m) => m.self) ?? room.members[0];
   return (
@@ -66,6 +66,8 @@ function HeartsteelRow({ room }: { room: RoomState }) {
     )} description={room.phase === 'active' ? t.heartsteelDesc : t.heartsteelSoloDesc}>
       <div className="heartsteelControls">
         {self ? <HeartsteelStats m={self} /> : null}
+        <Switch checked={s.heartsteelWidgetEnabled} onChange={(_, d) => void update({ heartsteelWidgetEnabled: d.checked })}
+          label={t.heartsteelWidgetShow} labelPosition="before" />
         <Switch checked={room.heartsteel.enabled} onChange={(_, d) => void api.setHeartsteelEnabled(d.checked)}
           label={room.heartsteel.enabled ? t.on : t.off} labelPosition="before" />
       </div>
@@ -174,7 +176,7 @@ export function RoomSection({ settings: s, update, onOpenChat }: { settings: Set
           ))}
         </div>
       </SettingRow>
-      <HeartsteelRow room={room} />
+      <HeartsteelRow room={room} settings={s} update={update} />
       {room.phase === 'idle' ? <RoomJoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} onOpenChat={onOpenChat} />}
       <SwitchRow icon={<SpeakerMute24Regular />} title={t.roomMute} description={t.roomMuteDesc}
         checked={s.roomMuted} onChange={(v) => void update({ roomMuted: v })} />

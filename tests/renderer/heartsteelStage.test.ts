@@ -114,11 +114,19 @@ describe('HeartsteelStage', () => {
 
   it('shows hit feedback and plays the Heartsteel sound', () => {
     const sound = { play: vi.fn() };
-    const stage = new HeartsteelStage(root as unknown as HTMLElement, vi.fn(), sound);
+    const stage = new HeartsteelStage(root as unknown as HTMLElement, vi.fn(), sound, () => 0.5, 1.6);
     stage.showHit({ id: 'b'.repeat(32), x: 80, y: 90, winnerName: 'Alex', winnerColor: 2, damage: 185, bonusGain: 19 });
     expect(root.textContent).toContain('185');
     expect(root.textContent).toContain('+19');
     expect(root.textContent).toContain('Alex');
-    expect(sound.play).toHaveBeenCalledWith('heartsteel', expect.any(Number));
+    expect(sound.play).toHaveBeenCalledWith('heartsteel', 0.8);
+    expect(root.querySelector('.heartsteelHit')!.style.values.get('--heartsteel-bonus-color')).toBe('#49d86a');
+  });
+
+  it('caps the boosted Heartsteel sound at full shared volume', () => {
+    const sound = { play: vi.fn() };
+    const stage = new HeartsteelStage(root as unknown as HTMLElement, vi.fn(), sound, () => 0.9, 1.6);
+    stage.showHit({ id: 'c'.repeat(32), x: 80, y: 90, winnerName: 'Alex', winnerColor: 2, damage: 185, bonusGain: 19 });
+    expect(sound.play).toHaveBeenCalledWith('heartsteel', 1);
   });
 });

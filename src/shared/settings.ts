@@ -26,6 +26,10 @@ export const CHAT_DANMAKU_AREAS = ['quarter', 'half', 'threeQuarter', 'full'] as
 export type ChatDanmakuArea = typeof CHAT_DANMAKU_AREAS[number];
 export const CHAT_DANMAKU_SPEEDS = ['slow', 'normal', 'fast'] as const;
 export type ChatDanmakuSpeed = typeof CHAT_DANMAKU_SPEEDS[number];
+export interface DesktopWidgetPosition {
+  x: number;
+  y: number;
+}
 
 /** Keyboard triggers offered on each platform. macOS can't reliably stop Caps Lock from toggling, so it isn't offered. */
 export const keyboardTriggers = (platform: Platform): NamedTrigger[] =>
@@ -61,6 +65,10 @@ export interface Settings {
   incomingPingLimit: number;
   /** Personal Heartsteel stack growth, shown as bonus max health in rooms. */
   heartsteelBonusHealth: number;
+  /** Shows this machine's Heartsteel health and stacks in a small draggable desktop widget. */
+  heartsteelWidgetEnabled: boolean;
+  /** Last top-left position of the Heartsteel desktop widget, in Electron DIP coordinates. */
+  heartsteelWidgetPosition: DesktopWidgetPosition | null;
   allowInternet: boolean;
   rejoinRoom: boolean;
   /** Canonical code of the room to rejoin on launch. */
@@ -124,6 +132,8 @@ export const DEFAULT_SETTINGS: Settings = {
   tagColor: 0,
   incomingPingLimit: 5,
   heartsteelBonusHealth: 0,
+  heartsteelWidgetEnabled: false,
+  heartsteelWidgetPosition: null,
   allowInternet: true,
   rejoinRoom: true,
   lastRoomCode: null,
@@ -159,7 +169,8 @@ export const LIMITS = {
 
 type NumKey = keyof typeof LIMITS;
 type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'cursorSkinEnabled' | 'cursorSkinClassic'
-  | 'allowInternet' | 'rejoinRoom' | 'roomMuted' | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck' | 'chatDanmakuEnabled';
+  | 'allowInternet' | 'rejoinRoom' | 'roomMuted' | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck' | 'chatDanmakuEnabled'
+  | 'heartsteelWidgetEnabled';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -254,6 +265,16 @@ function roomCode(raw: unknown): string | null {
   return parsed.ok ? parsed.code : null;
 }
 
+function widgetPosition(raw: unknown): DesktopWidgetPosition | null {
+  if (!isObj(raw) || typeof raw.x !== 'number' || typeof raw.y !== 'number' || !Number.isFinite(raw.x) || !Number.isFinite(raw.y)) {
+    return null;
+  }
+  return {
+    x: Math.min(100_000, Math.max(-100_000, Math.round(raw.x))),
+    y: Math.min(100_000, Math.max(-100_000, Math.round(raw.y))),
+  };
+}
+
 /** Valid entries only, rebuilt field by field: well-formed unique ids, a boolean flag, a safe name; the first MAX_CUSTOM_EMOTES. */
 function customEmotes(raw: unknown): CustomEmote[] {
   if (!Array.isArray(raw)) return [];
@@ -303,6 +324,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     tagColor: isTagColor(r.tagColor) ? r.tagColor : isTagColor(identity.color) ? identity.color : 0,
     incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
     heartsteelBonusHealth: normalizeHeartsteelBonusHealth(r.heartsteelBonusHealth),
+    heartsteelWidgetEnabled: bool(r.heartsteelWidgetEnabled, 'heartsteelWidgetEnabled'),
+    heartsteelWidgetPosition: widgetPosition(r.heartsteelWidgetPosition),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),

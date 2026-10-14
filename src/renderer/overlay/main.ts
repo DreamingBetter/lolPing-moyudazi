@@ -47,11 +47,13 @@ const chatStage = new ChatDanmakuStage(chatLayer);
 let settings: OverlaySettings = overlaySettings(DEFAULT_SETTINGS);
 const [fallbackPing] = pingsFor([DEFAULT_CLICK_PING]);
 const volume = (): number => (settings.muted ? 0 : settings.volume / 100);
+const heartsteelVolume = (): number => volume();
 const heartsteelStage = new HeartsteelStage(
   heartsteelLayer,
   (id, x, y) => window.overlay.reportHeartsteelClaim(id, x, y),
   sounds,
-  volume,
+  heartsteelVolume,
+  1.6,
 );
 
 const tick = (): void => {

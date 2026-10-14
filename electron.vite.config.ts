@@ -29,6 +29,7 @@ export default defineConfig({
         input: {
           overlay: resolve('src/renderer/overlay/index.html'),
           settings: resolve('src/renderer/settings/index.html'),
+          'heartsteel-widget': resolve('src/renderer/heartsteel-widget/index.html'),
         },
       },
     },
