@@ -31,6 +31,8 @@ export interface Settings {
   clickPing: boolean;
   /** Which ping trigger + click places. */
   clickPingId: PingId;
+  /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
+  gameCheck: boolean;
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
@@ -63,6 +65,8 @@ export interface Settings {
   emoteSound: boolean;
   /** Imported emotes, at most MAX_CUSTOM_EMOTES. Their files live in the data folder. */
   customEmotes: CustomEmote[];
+  /** Fetch and show room members' custom emotes. Off: nothing is fetched or served, and their images show as the placeholder. */
+  friendEmotes: boolean;
   /** Look for a new version on launch and every few hours. Checking by hand always works. */
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
@@ -81,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   trigger: 'alt',
   dragThresholdPx: 8,
   clickPing: false,
+  gameCheck: true,
   clickPingId: DEFAULT_CLICK_PING,
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
@@ -105,6 +110,7 @@ export const DEFAULT_SETTINGS: Settings = {
   emoteSizePx: 150,
   emoteSound: true,
   customEmotes: [],
+  friendEmotes: true,
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
 };
@@ -119,8 +125,8 @@ export const LIMITS = {
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
-  | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck';
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
+  | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -218,6 +224,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     trigger: pingTrigger,
     dragThresholdPx: num(r.dragThresholdPx, 'dragThresholdPx'),
     clickPing: bool(r.clickPing, 'clickPing'),
+    gameCheck: bool(r.gameCheck, 'gameCheck'),
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,
@@ -242,6 +249,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     emoteSizePx: num(r.emoteSizePx, 'emoteSizePx'),
     emoteSound: bool(r.emoteSound, 'emoteSound'),
     customEmotes: custom,
+    friendEmotes: bool(r.friendEmotes, 'friendEmotes'),
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
   };

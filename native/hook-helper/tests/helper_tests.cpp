@@ -28,7 +28,7 @@ static int g_fail = 0;
   } while (0)
 
 namespace {
-constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56, KEY_T = 0x54;
+constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56, KEY_T = 0x54, TAB = 0x09;
 using S = Decision::State;
 
 InputEvent key(EvKind k, uint32_t vk) {
@@ -188,14 +188,31 @@ static void test_escape_cancels_wheel() {
   CHECK(r.swallow && r.emits.empty());
 }
 
-static void test_trigger_released_during_wheel_cancels() {
+// As in League, once the wheel is open only the mouse button decides: letting go of the trigger first
+// keeps the wheel (and a trackpad's three-finger drag, whose button-up comes late, still pings).
+static void test_trigger_released_during_wheel_keeps_wheel() {
   Decision d;
   openWheel(d);
   Result r = d.onEvent(ku(ALT));
-  CHECK(findEmit(r, Emit::Kind::Cancel) != nullptr);
-  CHECK(d.state() == S::SwallowUp);
-  CHECK(d.onEvent(mu(Btn::Left, 130, 100)).swallow);
+  CHECK(r.emits.empty());
+  CHECK(d.state() == S::Wheel);
+  CHECK(r.swallow && r.injects.size() == 3);  // the Alt-up is still masked
+  r = d.onEvent(mv(140, 90));
+  CHECK(findEmit(r, Emit::Kind::WheelMove) != nullptr);
+  r = d.onEvent(mu(Btn::Left, 140, 90));
+  CHECK(r.swallow);
+  const Emit* rel = findEmit(r, Emit::Kind::WheelRelease);
+  CHECK(rel != nullptr && rel->x == 140 && rel->y == 90);
   CHECK(d.state() == S::Idle);
+  CHECK(!d.onEvent(md(Btn::Left, 1, 1)).swallow);  // no trigger held: clicks pass again
+
+  Decision e;
+  openWheel(e);
+  e.onEvent(ku(ALT));
+  r = e.onEvent(kd(ESC));  // Esc still cancels
+  CHECK(r.swallow && findEmit(r, Emit::Kind::Cancel) != nullptr);
+  CHECK(e.onEvent(mu(Btn::Left, 130, 100)).swallow);
+  CHECK(e.state() == S::Idle);
 }
 
 static void test_trigger_released_during_pending_replays_click_after_mask() {
@@ -221,6 +238,100 @@ static void test_trigger_released_during_pending_pings_when_click_ping_on() {
   const Emit* c = findEmit(r, Emit::Kind::Click);
   CHECK(c != nullptr && c->x == 100);
   CHECK(d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+}
+
+// Alt+Tab belongs to the task switcher: clicks pass through untouched while the chord lasts,
+// and after Alt is released Alt+click gestures again.
+static void test_alt_tab_clicks_pass_through() {
+  Decision d;
+  CHECK(!d.onEvent(kd(ALT)).swallow);
+  CHECK(!d.onEvent(kd(TAB)).swallow);  // the switcher's key marks the chord as foreign
+  CHECK(!d.onEvent(ku(TAB)).swallow);
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);  // the click belongs to the switcher, not to a wheel
+  CHECK(!findEmit(r, Emit::Kind::Click));
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  r = d.onEvent(ku(ALT));  // nothing was swallowed, so the Alt-up needs no mask
+  CHECK(!r.swallow);
+  CHECK(r.injects.empty());
+  d.onEvent(kd(ALT));  // the chord is over: Alt+click gestures again
+  r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(r.injects.size() == 2);  // clickPing off: the click is replayed
+}
+
+// Same rule with clickPing on: Alt+Tab + click must NOT place a ping.
+static void test_alt_tab_click_places_no_ping_even_with_click_ping_on() {
+  Decision d = withTrigger(Trigger::Alt, 0, true);
+  d.onEvent(kd(ALT));
+  d.onEvent(kd(TAB));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);
+  CHECK(!findEmit(r, Emit::Kind::Click));
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  r = d.onEvent(ku(ALT));
+  CHECK(!r.swallow);
+  CHECK(r.injects.empty());
+}
+
+// Win+Tab (task view) under the Win trigger; a stale foreign flag is cleared by key re-sync.
+static void test_win_tab_clicks_pass_through_and_sync_clears_flag() {
+  Decision d = withTrigger(Trigger::Win);
+  d.onEvent(kd(0x5B));  // LWin
+  d.onEvent(kd(TAB));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  d.syncKeyStates([](uint32_t) { return false; });  // the OS reports every key up (Win+L, UAC...)
+  d.onEvent(kd(0x5B));                              // LWin again
+  r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);  // gestures again
+}
+
+// A fullscreen game owns the screen: trigger+click passes through while the probe says fullscreen,
+// and gestures come back on the desktop. (clickPing on: the in-game drop-click case.)
+static void test_fullscreen_game_keeps_the_click() {
+  Config c;
+  c.trigger = Trigger::Alt;
+  c.clickPing = true;
+  c.gameCheck = true;
+  Decision d;
+  d.setConfig(c);
+  bool fullscreen = true;
+  d.setFullscreenProbe([&fullscreen](int, int) { return fullscreen; });
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);  // the game keeps the click
+  CHECK(!findEmit(r, Emit::Kind::Click));
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  fullscreen = false;  // back on the desktop: gestures again
+  r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Click) != nullptr);
+  CHECK(d.state() == S::Idle);
+}
+
+// gameCheck off: the probe is never consulted, fullscreen or not.
+static void test_fullscreen_probe_ignored_when_disabled() {
+  Config c;
+  c.trigger = Trigger::Alt;
+  c.clickPing = true;
+  c.gameCheck = false;
+  Decision d;
+  d.setConfig(c);
+  bool consulted = false;
+  d.setFullscreenProbe([&consulted](int, int) { consulted = true; return true; });
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);  // the gesture starts despite "fullscreen"
+  CHECK(!consulted);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Click) != nullptr);
 }
 
 static void test_alt_up_after_gesture_is_masked() {
@@ -431,6 +542,74 @@ static void test_custom_key_trigger() {
   CHECK(!d.onEvent(kd(KEY_V)).swallow);  // disabled: typing V works again
 }
 
+// Tap-through: a lone tap of a custom trigger key types it, replayed on release.
+static void test_custom_key_tap_types_the_key() {
+  constexpr uint32_t KEY_G = 0x47;
+  Decision d = withTrigger(Trigger::CustomVk, KEY_G);
+  Result r = d.onEvent(kd(KEY_G));
+  CHECK(r.swallow && r.injects.empty());  // held back until we know what it is for
+  CHECK(d.onEvent(kd(KEY_G)).swallow);    // auto-repeat while held back: still waiting
+  r = d.onEvent(ku(KEY_G));
+  CHECK(r.swallow && r.injects.size() == 2);
+  CHECK(injectIs(r.injects[0], InjectKind::KeyDown, Btn::None, KEY_G));
+  CHECK(injectIs(r.injects[1], InjectKind::KeyUp, Btn::None, KEY_G));
+  CHECK(d.state() == S::Idle);
+}
+
+// Tap-through: typing "gh" fast (H down before G up) keeps the order: G is flushed, then H is replayed behind it.
+static void test_custom_key_rollover_keeps_typed_order() {
+  constexpr uint32_t KEY_G = 0x47, KEY_H = 0x48;
+  Decision d = withTrigger(Trigger::CustomVk, KEY_G);
+  CHECK(d.onEvent(kd(KEY_G)).swallow);
+  Result r = d.onEvent(kd(KEY_H));
+  CHECK(r.swallow && r.injects.size() == 2);
+  CHECK(injectIs(r.injects[0], InjectKind::KeyDown, Btn::None, KEY_G));
+  CHECK(injectIs(r.injects[1], InjectKind::KeyDown, Btn::None, KEY_H));
+  CHECK(!d.onEvent(kd(KEY_G)).swallow);  // flushed: G's auto-repeat types
+  r = d.onEvent(ku(KEY_G));
+  CHECK(!r.swallow && r.injects.empty());  // the OS saw G down, so it must see the real up
+  CHECK(!d.onEvent(ku(KEY_H)).swallow);
+  // While G was typing, a click is not a gesture: it belongs to the text the user is in.
+  CHECK(d.onEvent(kd(KEY_G)).swallow);  // a fresh press is held back again
+  d.onEvent(kd(KEY_H));
+  CHECK(!d.onEvent(md(Btn::Left, 0, 0)).swallow);
+  d.onEvent(mu(Btn::Left, 0, 0));
+  d.onEvent(ku(KEY_H));
+  CHECK(!d.onEvent(ku(KEY_G)).swallow);
+}
+
+// Tap-through: Shift pressed while G is held sends g first, so the earlier letter isn't capitalised.
+static void test_custom_key_flushes_before_modifier() {
+  constexpr uint32_t KEY_G = 0x47, LSHIFT = 0xA0;
+  Decision d = withTrigger(Trigger::CustomVk, KEY_G);
+  d.onEvent(kd(KEY_G));
+  Result r = d.onEvent(kd(LSHIFT));
+  CHECK(r.swallow && r.injects.size() == 2);
+  CHECK(injectIs(r.injects[0], InjectKind::KeyDown, Btn::None, KEY_G));
+  CHECK(injectIs(r.injects[1], InjectKind::KeyDown, Btn::None, LSHIFT));
+  CHECK(!d.onEvent(ku(KEY_G)).swallow);
+}
+
+// Tap-through: a drag consumes the held-back key, so nothing is typed on release.
+static void test_custom_key_drag_types_nothing() {
+  constexpr uint32_t KEY_G = 0x47;
+  Decision d = withTrigger(Trigger::CustomVk, KEY_G);
+  d.onEvent(kd(KEY_G));
+  CHECK(d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  CHECK(findEmit(d.onEvent(mv(140, 100)), Emit::Kind::WheelOpen) != nullptr);
+  CHECK(findEmit(d.onEvent(mu(Btn::Left, 140, 100)), Emit::Kind::WheelRelease) != nullptr);
+  Result r = d.onEvent(ku(KEY_G));
+  CHECK(r.swallow && r.injects.empty());
+}
+
+// Caps Lock is not held back: a replayed tap would toggle it.
+static void test_caps_lock_is_not_tapped_through() {
+  Decision d = withTrigger(Trigger::CapsLock);
+  CHECK(d.onEvent(kd(CAPS)).swallow);
+  Result r = d.onEvent(ku(CAPS));
+  CHECK(r.swallow && r.injects.empty());
+}
+
 static void test_mouse4_trigger_drags_with_side_button() {
   Decision d = withTrigger(Trigger::Mouse4);
   CHECK(!d.onEvent(md(Btn::Left, 0, 0)).swallow);
@@ -636,16 +815,16 @@ static void test_pause_stops_both_wheels() {
   CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
 }
 
-static void test_releasing_emote_trigger_mid_wheel_cancels() {
+static void test_releasing_emote_trigger_mid_wheel_keeps_wheel() {
   Decision d = withEmote();
   openEmoteWheel(d);
   d.onEvent(kd(ALT));  // the other wheel's trigger doesn't touch this gesture
-  CHECK(findEmit(d.onEvent(ku(ALT)), Emit::Kind::Cancel) == nullptr);
+  CHECK(d.onEvent(ku(ALT)).emits.empty());
   CHECK(d.state() == S::Wheel);
-  Result r = d.onEvent(ku(CTRL));
-  CHECK(findEmit(r, Emit::Kind::Cancel) != nullptr);
-  CHECK(d.state() == S::SwallowUp);
-  CHECK(d.onEvent(mu(Btn::Left, 130, 100)).swallow);
+  CHECK(d.onEvent(ku(CTRL)).emits.empty());
+  CHECK(d.state() == S::Wheel);
+  Result r = d.onEvent(mu(Btn::Left, 130, 100));
+  CHECK(r.swallow && emitIs(findEmit(r, Emit::Kind::WheelRelease), WheelKind::Emote));
   CHECK(d.state() == S::Idle);
 }
 
@@ -831,11 +1010,16 @@ int main() {
   test_right_click_cancels_wheel();
   test_right_click_with_alt_but_no_gesture_passes();
   test_escape_cancels_wheel();
-  test_trigger_released_during_wheel_cancels();
+  test_trigger_released_during_wheel_keeps_wheel();
   test_trigger_released_during_pending_replays_click_after_mask();
   test_trigger_released_during_pending_pings_when_click_ping_on();
   test_alt_up_after_gesture_is_masked();
   test_plain_alt_tap_is_not_masked();
+  test_alt_tab_clicks_pass_through();
+  test_alt_tab_click_places_no_ping_even_with_click_ping_on();
+  test_win_tab_clicks_pass_through_and_sync_clears_flag();
+  test_fullscreen_game_keeps_the_click();
+  test_fullscreen_probe_ignored_when_disabled();
   test_toggle_hotkey_disables_and_enables();
   test_hotkey_autorepeat_toggles_once();
   test_hotkey_ignored_while_suspended();
@@ -854,6 +1038,11 @@ int main() {
   test_ctrl_trigger_ignores_alt();
   test_capslock_trigger_swallows_key();
   test_custom_key_trigger();
+  test_custom_key_tap_types_the_key();
+  test_custom_key_rollover_keeps_typed_order();
+  test_custom_key_flushes_before_modifier();
+  test_custom_key_drag_types_nothing();
+  test_caps_lock_is_not_tapped_through();
   test_mouse4_trigger_drags_with_side_button();
   test_ctrl_drag_opens_emote_wheel();
   test_alt_drag_is_still_the_ping_wheel();
@@ -864,7 +1053,7 @@ int main() {
   test_custom_emote_key_is_swallowed();
   test_mouse5_emote_beside_alt_ping();
   test_pause_stops_both_wheels();
-  test_releasing_emote_trigger_mid_wheel_cancels();
+  test_releasing_emote_trigger_mid_wheel_keeps_wheel();
   test_mask_menu_keys_off_leaves_alt_up_alone();
   test_mac_keycodes_map_to_vks();
   test_mac_modifier_held();
