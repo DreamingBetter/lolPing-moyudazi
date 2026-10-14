@@ -125,6 +125,15 @@ describe('room settings', () => {
     const code = makeRoomCode(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]));
     expect(normalizeSettings({ lastRoomCode: formatRoomCode(code) }).lastRoomCode).toBe(code);
   });
+
+  it('persists a normalized personal Heartsteel bonus health value', () => {
+    expect(DEFAULT_SETTINGS.heartsteelBonusHealth).toBe(0);
+    expect(normalizeSettings({}).heartsteelBonusHealth).toBe(0);
+    expect(normalizeSettings({ heartsteelBonusHealth: 42 }).heartsteelBonusHealth).toBe(42);
+    expect(normalizeSettings({ heartsteelBonusHealth: 42.8 }).heartsteelBonusHealth).toBe(43);
+    expect(normalizeSettings({ heartsteelBonusHealth: -1 }).heartsteelBonusHealth).toBe(0);
+    expect(normalizeSettings({ heartsteelBonusHealth: '99' }).heartsteelBonusHealth).toBe(0);
+  });
 });
 
 describe('chat danmaku settings', () => {

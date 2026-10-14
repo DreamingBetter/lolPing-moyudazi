@@ -4,6 +4,7 @@ import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
+import { normalizeHeartsteelBonusHealth } from './heartsteel';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
@@ -58,6 +59,8 @@ export interface Settings {
   tagColor: number;
   /** Pings per second accepted from each room member; 0 = unlimited. */
   incomingPingLimit: number;
+  /** Personal Heartsteel stack growth, shown as bonus max health in rooms. */
+  heartsteelBonusHealth: number;
   allowInternet: boolean;
   rejoinRoom: boolean;
   /** Canonical code of the room to rejoin on launch. */
@@ -120,6 +123,7 @@ export const DEFAULT_SETTINGS: Settings = {
   displayName: 'Player',
   tagColor: 0,
   incomingPingLimit: 5,
+  heartsteelBonusHealth: 0,
   allowInternet: true,
   rejoinRoom: true,
   lastRoomCode: null,
@@ -298,6 +302,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     displayName: typeof r.displayName === 'string' ? sanitizeName(r.displayName, fallbackName) : fallbackName,
     tagColor: isTagColor(r.tagColor) ? r.tagColor : isTagColor(identity.color) ? identity.color : 0,
     incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
+    heartsteelBonusHealth: normalizeHeartsteelBonusHealth(r.heartsteelBonusHealth),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),
