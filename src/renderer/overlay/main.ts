@@ -14,6 +14,7 @@ import type { WheelKind } from '../../shared/protocol';
 import { DEFAULT_SETTINGS, overlaySettings, type OverlaySettings } from '../../shared/settings';
 import { ChatDanmakuStage } from './chatDanmaku';
 import { EmoteStage } from './emoteFx';
+import { HeartsteelStage } from './heartsteelStage';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
@@ -36,6 +37,9 @@ pingLayer.after(emoteLayer);
 const chatLayer = document.createElement('div');
 chatLayer.id = 'chatDanmaku';
 emoteLayer.after(chatLayer);
+const heartsteelLayer = document.createElement('div');
+heartsteelLayer.id = 'heartsteel';
+chatLayer.after(heartsteelLayer);
 
 const sounds = new SoundBank();
 const stage = new EmoteStage(emoteLayer);
@@ -43,6 +47,12 @@ const chatStage = new ChatDanmakuStage(chatLayer);
 let settings: OverlaySettings = overlaySettings(DEFAULT_SETTINGS);
 const [fallbackPing] = pingsFor([DEFAULT_CLICK_PING]);
 const volume = (): number => (settings.muted ? 0 : settings.volume / 100);
+const heartsteelStage = new HeartsteelStage(
+  heartsteelLayer,
+  (id, x, y) => window.overlay.reportHeartsteelClaim(id, x, y),
+  sounds,
+  volume,
+);
 
 const tick = (): void => {
   if (settings.tickSound) sounds.play(TICK_SOUND, volume() * 0.5);
@@ -128,6 +138,9 @@ window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
 window.overlay.on('chat:spawn', (m) => chatStage.spawn(m));
+window.overlay.on('heartsteel:target', (t) => heartsteelStage.showTarget(t));
+window.overlay.on('heartsteel:clear', (t) => heartsteelStage.clear(t?.id));
+window.overlay.on('heartsteel:hit', (h) => heartsteelStage.showHit(h));
 
 /** Resolves with `label` when the image at `url` doesn't load. */
 const probe = (url: string, label: string): Promise<string | null> =>
@@ -156,12 +169,17 @@ function checkImages(): Promise<string[]> {
     .map((file) => probeHead(`../${file}`, file));
   const actions = [...new Set(settings.actionWheel.map((a) => a.icon))]
     .map((icon) => probe(actionIconUrl(icon), `actions/${icon}.svg`));
-  return Promise.all([...pings, ...emotes, ...actions]).then((r) => r.filter((x): x is string => x !== null));
+  const heartsteelImages = [
+    probe('../heartsteel/item.png', 'heartsteel/item.png'),
+    probe('../heartsteel/target-reference.png', 'heartsteel/target-reference.png'),
+  ];
+  return Promise.all([...pings, ...emotes, ...actions, ...heartsteelImages]).then((r) => r.filter((x): x is string => x !== null));
 }
 
 const soundEntries = [
   ...allSoundNames().map((name) => ({ key: name, url: soundUrl(name) })),
   ...EMOTE_CATALOG.filter((e) => e.hasSound).map((e) => ({ key: `emote:${e.slug}`, url: emoteSoundUrl(e.slug) })),
+  { key: 'heartsteel', url: '../sounds/heartsteel.mp3' },
 ];
 // About lists a missing file by its place in assets/ ("sounds/x.wav", "emotes/y.ogg"), not by the URL this page used.
 const assetName = (url: string): string => url.replace(/^(?:\.{1,2}\/)+/, '');

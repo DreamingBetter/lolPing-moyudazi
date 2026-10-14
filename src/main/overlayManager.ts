@@ -1,8 +1,10 @@
 import { BrowserWindow, ipcMain, screen, type Display, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
+import { HEARTSTEEL_TARGET_HIT_RADIUS_PX, isHeartsteelTargetId, type HeartsteelCursorKind } from '../shared/heartsteel';
 import {
-  OVERLAY_ACTIONED, OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
+  OVERLAY_ACTIONED, OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_HEARTSTEEL_CLAIM, OVERLAY_PINGED,
+  type OverlayChannel, type OverlayEvents, type PingTag,
 } from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
@@ -29,6 +31,13 @@ export interface SharedEmote {
 }
 
 export interface SelectedAction {
+  id: string;
+  displayId: number;
+  x: number;
+  y: number;
+}
+
+export interface HeartsteelClaim {
   id: string;
   displayId: number;
   x: number;
@@ -80,6 +89,12 @@ export class OverlayManager extends EventEmitter {
       if (!p || typeof p.id !== 'string' || p.id.trim() === '' || !isNum(p.x) || !isNum(p.y)) return;
       const displayId = this.displayOf(event.sender);
       if (displayId !== undefined) this.emit('action', { id: p.id, displayId, x: p.x, y: p.y } satisfies SelectedAction);
+    });
+    ipcMain.on(OVERLAY_HEARTSTEEL_CLAIM, (event, raw: unknown) => {
+      const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
+      if (!p || !isHeartsteelTargetId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
+      const displayId = this.displayOf(event.sender);
+      if (displayId !== undefined) this.emit('heartsteelClaim', { id: p.id, displayId, x: p.x, y: p.y } satisfies HeartsteelClaim);
     });
     this.rebuild();
     screen.on('display-added', () => this.rebuild());
@@ -170,6 +185,51 @@ export class OverlayManager extends EventEmitter {
       name: message.name,
       color: message.color,
       text: message.text,
+    });
+  }
+
+  showHeartsteelTarget(payload: { displayId: number; id: string; x: number; y: number; expiresAt: number; cursor: HeartsteelCursorKind }): void {
+    const w = this.windows.get(payload.displayId);
+    if (!w || w.isDestroyed()) return;
+    this.send(payload.displayId, 'heartsteel:target', {
+      id: payload.id,
+      x: payload.x,
+      y: payload.y,
+      expiresAt: payload.expiresAt,
+      cursor: payload.cursor,
+    });
+    const r = HEARTSTEEL_TARGET_HIT_RADIUS_PX;
+    w.setIgnoreMouseEvents(false);
+    w.setShape([{ x: Math.round(payload.x - r), y: Math.round(payload.y - r), width: r * 2, height: r * 2 }]);
+  }
+
+  clearHeartsteelTarget(id?: string): void {
+    for (const [displayId, w] of this.windows) {
+      this.send(displayId, 'heartsteel:clear', id ? { id } : null);
+      if (w.isDestroyed()) continue;
+      w.setShape([]);
+      w.setIgnoreMouseEvents(true);
+    }
+  }
+
+  showHeartsteelHit(payload: {
+    displayId: number;
+    id: string;
+    x: number;
+    y: number;
+    winnerName: string;
+    winnerColor: number;
+    damage: number;
+    bonusGain: number;
+  }): void {
+    this.send(payload.displayId, 'heartsteel:hit', {
+      id: payload.id,
+      x: payload.x,
+      y: payload.y,
+      winnerName: payload.winnerName,
+      winnerColor: payload.winnerColor,
+      damage: payload.damage,
+      bonusGain: payload.bonusGain,
     });
   }
 

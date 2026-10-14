@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EmoteRef } from '../shared/emotes';
 import {
-  OVERLAY_ACTIONED, OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents,
+  OVERLAY_ACTIONED, OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_HEARTSTEEL_CLAIM, OVERLAY_PINGED,
+  type OverlayChannel, type OverlayEvents,
 } from '../shared/ipc';
 import type { PingId } from '../shared/pings';
 
@@ -24,6 +25,10 @@ const api = {
   /** An action wheel slot was selected here (CSS px in this overlay). */
   reportAction(id: string, x: number, y: number): void {
     ipcRenderer.send(OVERLAY_ACTIONED, { id, x, y });
+  },
+  /** A Heartsteel target was right-clicked here (CSS px in this overlay). */
+  reportHeartsteelClaim(id: string, x: number, y: number): void {
+    ipcRenderer.send(OVERLAY_HEARTSTEEL_CLAIM, { id, x, y });
   },
 };
 

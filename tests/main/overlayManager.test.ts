@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmoteArt } from '../../src/shared/emotes';
-import { OVERLAY_ACTIONED, OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
+import { OVERLAY_ACTIONED, OVERLAY_EMOTED, OVERLAY_HEARTSTEEL_CLAIM, OVERLAY_PINGED } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
 const h = vi.hoisted(() => ({
-  windows: [] as Array<{ x: number; destroyed: boolean; webContents: { send: ReturnType<typeof vi.fn> } }>,
+  windows: [] as Array<{
+    x: number;
+    destroyed: boolean;
+    webContents: { send: ReturnType<typeof vi.fn> };
+    setShape: ReturnType<typeof vi.fn>;
+    setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
+  }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
 }));
 
@@ -17,12 +23,13 @@ vi.mock('electron', async () => {
     x: number;
     destroyed = false;
     webContents = Object.assign(new Emitter(), { send: vi.fn() });
+    setShape = vi.fn();
+    setIgnoreMouseEvents = vi.fn();
     constructor(opts: { x: number }) {
       super();
       this.x = opts.x;
       h.windows.push(this);
     }
-    setIgnoreMouseEvents(): void {}
     setAlwaysOnTop(): void {}
     setBounds(): void {}
     showInactive(): void {}
@@ -215,5 +222,26 @@ describe('OverlayManager chat danmaku', () => {
     mgr.spawnChatDanmaku({ id: 'm2', peer: 'p1', name: 'Alex', color: 4, ts: 1, text: 'dropped', self: false });
     expect(sent(0)).toEqual([]);
     expect(sent(1)).toEqual([]);
+  });
+});
+
+describe('OverlayManager Heartsteel targets', () => {
+  it('shows a target, opens only a small hit shape, and clears it back to click-through', () => {
+    mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
+    expect(sent(0)).toEqual([['heartsteel:target', { id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' }]]);
+    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
+
+    mgr.clearHeartsteelTarget('1'.repeat(32));
+    expect(sent(0).at(-1)).toEqual(['heartsteel:clear', { id: '1'.repeat(32) }]);
+    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
+    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+  });
+
+  it('emits a Heartsteel claim report from the target display', () => {
+    const claim = vi.fn();
+    mgr.on('heartsteelClaim', claim);
+    h.handlers.get(OVERLAY_HEARTSTEEL_CLAIM)!({ sender: h.windows[1].webContents }, { id: '2'.repeat(32), x: 10, y: 20 });
+    expect(claim).toHaveBeenCalledWith({ id: '2'.repeat(32), displayId: 2, x: 10, y: 20 });
   });
 });

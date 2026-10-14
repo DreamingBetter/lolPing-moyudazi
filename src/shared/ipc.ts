@@ -1,4 +1,5 @@
 import type { EmoteArt, EmoteFile, EmoteRef, ImportResult } from './emotes';
+import type { HeartsteelCursorKind } from './heartsteel';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
@@ -33,13 +34,16 @@ export interface OverlayEvents {
   'emote:clear': { owner: string };
   'toast:show': { title: string; body: string };
   'chat:spawn': { id: string; name: string; color: number; text: string };
+  'heartsteel:target': { id: string; x: number; y: number; expiresAt: number; cursor: HeartsteelCursorKind };
+  'heartsteel:clear': { id?: string } | null;
+  'heartsteel:hit': { id: string; x: number; y: number; winnerName: string; winnerColor: number; damage: number; bonusGain: number };
 }
 
 export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
-  'toast:show', 'chat:spawn',
+  'toast:show', 'chat:spawn', 'heartsteel:target', 'heartsteel:clear', 'heartsteel:hit',
 ];
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
@@ -50,6 +54,8 @@ export const OVERLAY_PINGED = 'overlay:pinged';
 export const OVERLAY_EMOTED = 'overlay:emoted';
 /** overlay renderer → main: {id, x, y} of an action selected from the action wheel. */
 export const OVERLAY_ACTIONED = 'overlay:actioned';
+/** overlay renderer → main: {id, x, y} of a Heartsteel target right-click claim. */
+export const OVERLAY_HEARTSTEEL_CLAIM = 'overlay:heartsteelClaim';
 
 export interface AppStatus {
   enabled: boolean;

@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
+import type { HeartsteelCursorKind } from '../shared/heartsteel';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
@@ -293,6 +294,37 @@ function start(): void {
   room.on('heartsteelBonusHealth', (heartsteelBonusHealth: number) => {
     store.update({ heartsteelBonusHealth });
   });
+  const heartsteelCursor = (): HeartsteelCursorKind =>
+    settings.cursorSkinEnabled ? (settings.cursorSkinClassic ? 'classic' : 'modern') : 'system';
+  room.on('heartsteelTarget', (target) => {
+    const display = resolveTarget(overlays.numbered(), target.d);
+    if (!display) return;
+    overlays.showHeartsteelTarget({
+      displayId: display.id,
+      id: target.id,
+      x: target.x * display.bounds.width,
+      y: target.y * display.bounds.height,
+      expiresAt: target.expiresAt,
+      cursor: heartsteelCursor(),
+    });
+  });
+  room.on('heartsteelClear', (target: { id: string } | null) => overlays.clearHeartsteelTarget(target?.id));
+  room.on('heartsteelHit', (hit) => {
+    const target = room.state().heartsteel.target;
+    if (!target) return;
+    const display = resolveTarget(overlays.numbered(), target.d);
+    if (!display) return;
+    overlays.showHeartsteelHit({
+      displayId: display.id,
+      id: hit.id,
+      x: target.x * display.bounds.width,
+      y: target.y * display.bounds.height,
+      winnerName: hit.winnerName,
+      winnerColor: hit.winnerColor,
+      damage: hit.damage,
+      bonusGain: hit.bonusGain,
+    });
+  });
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
   overlays.on('shared', (p: SharedPing) => {
@@ -331,6 +363,7 @@ function start(): void {
       overlays.toast(text().actionFailed, text().actionOpenFailed);
     });
   });
+  overlays.on('heartsteelClaim', (p: { id: string }) => room.claimHeartsteelTarget(p.id));
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
     const t = text();
