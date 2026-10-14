@@ -61,6 +61,10 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - After writing `HKCU\Control Panel\Cursors`, refresh with `SystemParametersInfo(SPI_SETCURSORS, 0, NULL, SPIF_SENDCHANGE)`, i.e. `fWinIni = 0x0002`. Do not pass `0x0003`; including `SPIF_UPDATEINIFILE` made `SPI_SETCURSORS` return false on the user's Windows build.
 - Mark newly added settings features with a prominent red/orange `NEW` text badge in every UI language. This should usually be an eye-catching badge beside the feature title rather than an extra icon, so it does not compete with the feature's own navigation icon. If a settings section contains a new feature row, mark both the row/title and that section's side-nav tab.
 - Room chat keeps only the latest 200 in-memory messages. The chat composer placeholder should show two lines: the Enter/Shift+Enter send hint first, then the "recent 200 messages" retention hint.
+- Heartsteel room gameplay is a League-inspired room mini-game. Any active room member can toggle it for the room. Each user has persistent personal Heartsteel progress: base max health is 1000, saved bonus health starts at 0, displayed stacks equal bonus health, and hits add permanent bonus health only to the clicker.
+- Heartsteel hit math is integer based: damage is `Math.round(125 + maxHealth * 0.06)`, bonus gain is `Math.round(damage * 0.1)`, and no other player's health is reduced.
+- Heartsteel target scheduling should not introduce a room-owner concept. Elect the active member with the lowest peer id as the temporary scheduler; everyone still validates target ids and ignores duplicate/late hits.
+- Heartsteel desktop targets should use conservative overlay hit testing. Keep normal desktop interaction click-through outside the active target, preferably with Windows `BrowserWindow.setShape()` around the target hit area.
 
 ## Development Habits
 
@@ -92,3 +96,8 @@ Cursor skin assets:
   - `assets/cursors/summoner` for the main Windows cursor-role set.
   - `assets/cursors/summoner-extra` for optional replacement/extra cursor variants.
 - `.cur` and `.ani` files are suitable for Windows system cursor schemes. Keep file names ASCII when adding bundled packs so packaging and registry paths stay predictable.
+
+Heartsteel assets:
+
+- The user provided `D:\cc_workspace\lolping\assets\心之钢效果参考图.png`, `D:\cc_workspace\lolping\assets\心之钢装备图.png`, and `D:\cc_workspace\lolping\assets\sounds\心之钢音效.mp3`. Copy them into the active develop worktree before implementation.
+- Recreate the Heartsteel target effect from the reference image with CSS/Canvas rather than using the tiny reference image directly as the visible target.
