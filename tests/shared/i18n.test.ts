@@ -113,13 +113,17 @@ describe('language', () => {
     expect(en.chatDanmakuSpeedNormal).toBe('Normal');
   });
 
-  it('explains chat send and newline shortcuts in the composer placeholder', () => {
+  it('explains chat send shortcuts and the 200-message history limit in the composer placeholder', () => {
     const en = strings('en');
     const zh = strings('zh-CN');
-    expect(en.chatPlaceholder).toContain('Enter to send');
-    expect(en.chatPlaceholder).toContain('Shift+Enter');
-    expect(zh.chatPlaceholder).toContain('Enter发送');
-    expect(zh.chatPlaceholder).toContain('Shift+Enter换行');
+    expect(en.chatPlaceholder.split('\n')).toEqual([
+      'Write a message (Enter to send, Shift+Enter for a new line)',
+      'Keeps the most recent 200 messages',
+    ]);
+    expect(zh.chatPlaceholder.split('\n')).toEqual([
+      '输入消息（Enter 发送，Shift+Enter 换行）',
+      '消息保存最近200条',
+    ]);
   });
 
   it('defaults to auto and rejects unknown values', () => {

@@ -677,7 +677,7 @@ describe('chat', () => {
     })]);
   });
 
-  it('merges valid history parts from multiple responders, dedupes and keeps the latest 50', async () => {
+  it('merges valid history parts from multiple responders, dedupes and keeps the latest 200', async () => {
     await room.join(formatRoomCode(CODE));
     const alex = new Remote('1111111111111111', 'lan:alex', lan);
     const ben = new Remote('2222222222222222', 'lan:ben', lan);
@@ -686,18 +686,21 @@ describe('chat', () => {
     const request = sentMessages('lan:alex').find((m) => m.t === 'chatHistoryRequest');
     expect(request?.t).toBe('chatHistoryRequest');
     if (request?.t !== 'chatHistoryRequest') return;
-    const ids = Array.from({ length: 51 }, (_, i) => (i + 1).toString(16).padStart(32, '0'));
+    const ids = Array.from({ length: 201 }, (_, i) => (i + 1).toString(16).padStart(32, '0'));
     const item = (id: string, peer: string, text: string) => ({ id, peer, ts: Number.parseInt(id.slice(-2), 16), name: peer === alex.peer ? 'Alex' : 'Ben', color: 2, text });
-    const chunks = Array.from({ length: 7 }, (_, i) => ids.slice(i * 8, i === 6 ? undefined : i * 8 + 8));
-    chunks.slice(0, 4).forEach((chunk, part) => alex.history(request.request, part, 4, chunk.map((id) => item(id, alex.peer, 'x'))));
-    chunks.slice(4).forEach((chunk, part) => {
+    const perPacket = 4;
+    const chunks = Array.from({ length: Math.ceil(ids.length / perPacket) }, (_, i) => ids.slice(i * perPacket, i * perPacket + perPacket));
+    const alexChunks = chunks.slice(0, 26);
+    const benChunks = chunks.slice(26);
+    alexChunks.forEach((chunk, part) => alex.history(request.request, part, alexChunks.length, chunk.map((id) => item(id, alex.peer, 'x'))));
+    benChunks.forEach((chunk, part) => {
       const messages = chunk.map((id) => item(id, ben.peer, 'x'));
       if (part === 0) messages.push(item(ids[10], ben.peer, 'duplicate id from another member'));
-      ben.history(request.request, part, 3, messages);
+      ben.history(request.request, part, benChunks.length, messages);
     });
-    ben.history(request.request, 0, 1, [item(ids[50], ben.peer, 'duplicate')]);
-    expect(room.chatState().messages).toHaveLength(50);
-    expect(new Set(room.chatState().messages.map((m) => m.id)).size).toBe(50);
+    ben.history(request.request, 0, 1, [item(ids[200], ben.peer, 'duplicate')]);
+    expect(room.chatState().messages).toHaveLength(200);
+    expect(new Set(room.chatState().messages.map((m) => m.id)).size).toBe(200);
     expect(room.chatState().messages[0].id).toBe(ids[1]);
     expect(liveChats).toEqual([]);
   });

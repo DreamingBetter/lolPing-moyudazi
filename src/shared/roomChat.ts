@@ -1,4 +1,4 @@
-export const CHAT_HISTORY_LIMIT = 50;
+export const CHAT_HISTORY_LIMIT = 200;
 export const CHAT_TEXT_MAX_CODE_POINTS = 1000;
 export const CHAT_OUTGOING_RATE = 3;
 export const CHAT_OUTGOING_BURST = 6;

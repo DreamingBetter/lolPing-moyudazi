@@ -60,6 +60,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - If applying Summoner fails after a backup exists, attempt to write the backup values back immediately, but keep the backup file so the user can still turn the switch off later.
 - After writing `HKCU\Control Panel\Cursors`, refresh with `SystemParametersInfo(SPI_SETCURSORS, 0, NULL, SPIF_SENDCHANGE)`, i.e. `fWinIni = 0x0002`. Do not pass `0x0003`; including `SPIF_UPDATEINIFILE` made `SPI_SETCURSORS` return false on the user's Windows build.
 - Mark newly added settings features with a prominent red/orange `NEW` text badge in every UI language. This should usually be an eye-catching badge beside the feature title rather than an extra icon, so it does not compete with the feature's own navigation icon. If a settings section contains a new feature row, mark both the row/title and that section's side-nav tab.
+- Room chat keeps only the latest 200 in-memory messages. The chat composer placeholder should show two lines: the Enter/Shift+Enter send hint first, then the "recent 200 messages" retention hint.
 
 ## Development Habits
 
