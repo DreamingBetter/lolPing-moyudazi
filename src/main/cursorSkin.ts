@@ -1,7 +1,7 @@
 import { execFile as nodeExecFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, win32 } from 'node:path';
 import { promisify } from 'node:util';
 import type { Platform } from '../shared/platform';
 
@@ -165,6 +165,12 @@ function backupValues(raw: unknown): CursorValues {
   return normalizeCursorValues(obj.values);
 }
 
+class InvalidCursorBackupError extends Error {
+  constructor(readonly text: string) {
+    super('Cursor backup is invalid.');
+  }
+}
+
 export class CursorSkinService {
   constructor(private readonly deps: CursorSkinDeps) {}
 
@@ -186,10 +192,21 @@ export class CursorSkinService {
   async restoreOriginal(): Promise<CursorSkinResult> {
     if (this.deps.platform !== 'win') return { ok: false, error: 'Cursor skins are only supported on Windows.' };
     try {
-      const backup = await this.readBackup();
-      const values = backup ?? defaultAeroCursorValues(this.deps.systemRoot);
+      let backup: CursorValues | null = null;
+      let archive: 'branded' | 'invalid' | null = null;
+      let invalidText: string | undefined;
+      try {
+        backup = await this.readBackup();
+        if (!backup && this.deps.exists(this.deps.backupFile)) archive = 'branded';
+      } catch (e) {
+        if (!(e instanceof InvalidCursorBackupError)) throw e;
+        archive = 'invalid';
+        invalidText = e.text;
+      }
+      if (archive) await this.archiveBackup(archive, invalidText);
+      const values = backup ?? await this.readLegacyBackup() ?? defaultAeroCursorValues(this.deps.systemRoot);
       await this.writeAndReload(values);
-      if (backup) await this.deps.removeFile(this.deps.backupFile).catch(() => undefined);
+      if (this.deps.exists(this.deps.backupFile)) await this.deps.removeFile(this.deps.backupFile).catch(() => undefined);
       return { ok: true };
     } catch (e) {
       return err(e);
@@ -210,9 +227,13 @@ export class CursorSkinService {
   }
 
   private async backupCurrentValuesOnce(): Promise<void> {
-    if (this.deps.exists(this.deps.backupFile)) return;
+    if (await this.readBackup()) return;
+    if (this.deps.exists(this.deps.backupFile)) await this.archiveBackup('branded');
     await this.deps.mkdir(dirname(this.deps.backupFile));
-    const values = await this.readCurrentValues();
+    const current = await this.readCurrentValues();
+    const values = this.isSummonerValues(current)
+      ? await this.readLegacyBackup() ?? defaultAeroCursorValues(this.deps.systemRoot)
+      : current;
     await this.deps.writeFile(this.deps.backupFile, JSON.stringify({ version: 1, values }, null, 2));
   }
 
@@ -245,8 +266,52 @@ export class CursorSkinService {
   }
 
   private async readBackup(): Promise<CursorValues | null> {
-    if (!this.deps.exists(this.deps.backupFile)) return null;
-    return backupValues(JSON.parse(await this.deps.readFile(this.deps.backupFile)));
+    return this.readBackupFile(this.deps.backupFile);
+  }
+
+  private async readBackupFile(path: string): Promise<CursorValues | null> {
+    if (!this.deps.exists(path)) return null;
+    const text = await this.deps.readFile(path);
+    let values: CursorValues;
+    try {
+      values = backupValues(JSON.parse(text));
+    } catch {
+      throw new InvalidCursorBackupError(text);
+    }
+    return this.isSummonerValues(values) ? null : values;
+  }
+
+  private async readLegacyBackup(): Promise<CursorValues | null> {
+    const appDataDir = win32.dirname(win32.dirname(win32.dirname(this.deps.installDir)));
+    const path = win32.join(appDataDir, 'lolPing', 'cursor-backup.json');
+    try {
+      return await this.readBackupFile(path);
+    } catch {
+      return null;
+    }
+  }
+
+  private async archiveBackup(reason: 'branded' | 'invalid', text?: string): Promise<void> {
+    const content = text ?? await this.deps.readFile(this.deps.backupFile);
+    let path = `${this.deps.backupFile}.${reason}`;
+    for (let suffix = 1; this.deps.exists(path); suffix++) path = `${this.deps.backupFile}.${reason}.${suffix}`;
+    await this.deps.writeFile(path, content);
+  }
+
+  private isSummonerValues(values: CursorValues): boolean {
+    const appDataDir = win32.dirname(win32.dirname(win32.dirname(this.deps.installDir)));
+    const schemes: Array<[string, Record<CursorRole, string>]> = [
+      [this.deps.installDir, SUMMONER_CURSOR_FILES],
+      [this.deps.classicInstallDir, SUMMONER_CLASSIC_CURSOR_FILES],
+      [win32.join(appDataDir, 'lolPing', 'cursors', 'summoner'), SUMMONER_CURSOR_FILES],
+      [win32.join(appDataDir, 'lolPing', 'cursors', 'summoner-classic'), SUMMONER_CLASSIC_CURSOR_FILES],
+    ];
+    const samePath = (a: string, b: string): boolean => win32.normalize(a).toLowerCase() === win32.normalize(b).toLowerCase();
+    return schemes.some(([dir, files]) => {
+      const roles = CURSOR_ROLES.filter((role) => files[role]);
+      const matching = roles.filter((role) => samePath(values[role], win32.join(dir, files[role]))).length;
+      return matching >= roles.length - 2;
+    });
   }
 
   private async rollbackApply(): Promise<void> {
