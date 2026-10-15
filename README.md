@@ -42,6 +42,8 @@ lolPing-moyudazi keeps the satisfying hold-and-drag rhythm of an in-game wheel a
 
 Version 0.6.0 keeps the original ping and emote wheels and adds a second wheel for desktop actions, plus social, cosmetic, and light entertainment features.
 
+**0.6.1 maintenance update:** Restores the original Windows cursor scheme after switching away from the classic skin and includes the Heartsteel hit sound in the installer.
+
 ### ⚡ Action wheel: make desktop work feel like a quick play
 
 Hold **Shift** and drag to open the default action wheel. Release on a slice to open the Windows snipping flow, mute or change volume, show the desktop, lock the screen, open your browser, or launch a configured website. You can replace all eight slots from the built-in library and edit each slot's label, URL, app path, file path, folder path, or volume step.
@@ -68,7 +70,7 @@ No game launch is required: start Heartsteel directly from the room settings whe
 
 ## Get started in 30 seconds
 
-1. Download <code>lolPing-moyudazi-Setup-0.6.0.exe</code> from the <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.0">0.6.0 release</a> and install it.
+1. Download <code>lolPing-moyudazi-Setup-0.6.1.exe</code> from the <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.1">0.6.1 release</a> and install it.
 2. Find lolPing-moyudazi in the Windows system tray and open <strong>Settings</strong>.
 3. Leave the default keys for a first try, or choose your own keys and wheel layout.
 4. Hold a trigger key, drag the pointer to a slice, and release. The centre cancels the wheel; right-click and <strong>Esc</strong> also cancel.
@@ -121,7 +123,7 @@ Everything important is available in Settings:
 
 ## Installation
 
-The Windows installer is available on the <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.0">0.6.0 release page</a>. The installer is not code-signed, so Windows SmartScreen may require <strong>More info → Run anyway</strong>.
+The Windows installer is available on the <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.1">0.6.1 release page</a>. The installer is not code-signed, so Windows SmartScreen may require <strong>More info → Run anyway</strong>.
 
 ## Build from source
 
@@ -144,7 +146,7 @@ npm run dist
 
 ## Credits and attribution
 
-lolPing-moyudazi 0.6.0 is a Windows-focused second development based on <a href="https://github.com/darrenprx/lolPing">darrenprx/lolPing</a>. We are building on the original project's architecture, input model, and wheel renderer while adding the action wheel, room chat, danmaku, cursor skins, and Heartsteel mode described above. Please visit the original project, read its documentation, and consider giving the original author a star:
+lolPing-moyudazi is a Windows-focused second development based on <a href="https://github.com/darrenprx/lolPing">darrenprx/lolPing</a>. We are building on the original project's architecture, input model, and wheel renderer while adding the action wheel, room chat, danmaku, cursor skins, and Heartsteel mode described above. Please visit the original project, read its documentation, and consider giving the original author a star:
 
 <strong>Original project:</strong> <a href="https://github.com/darrenprx/lolPing">https://github.com/darrenprx/lolPing</a>
 

@@ -38,6 +38,8 @@ lolPing-moyudazi 保留了游戏里“按住、拖动、松开”的爽快节奏
 
 0.6.0 保留原有的信号轮盘和表情轮盘，并新增桌面动作轮盘，以及房间社交、指针皮肤和轻量娱乐玩法。
 
+**0.6.1 修复版：** 修复切换经典指针皮肤后原有 Windows 指针方案无法正确恢复的问题，并确保心之钢命中音效随安装包发布。
+
 ### ⚡ 动作轮盘：把桌面操作变成一次拖动
 
 按住 **Shift** 拖动即可打开默认动作轮盘。松开后可以直接进入 Windows 截图流程、静音或调节音量、显示桌面、锁定屏幕、打开浏览器，或者打开预先配置的网站。8 个槽位都可以从内置动作库重新安排，每个动作都能编辑名称、网址、应用路径、文件路径、文件夹路径或音量步进。
@@ -64,7 +66,7 @@ lolPing-moyudazi 保留了游戏里“按住、拖动、松开”的爽快节奏
 
 ## 30 秒上手
 
-1. 从 <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.0">0.6.0 Release</a> 下载并安装 <code>lolPing-moyudazi-Setup-0.6.0.exe</code>。
+1. 从 <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.1">0.6.1 Release</a> 下载并安装 <code>lolPing-moyudazi-Setup-0.6.1.exe</code>。
 2. 在 Windows 系统托盘找到 lolPing-moyudazi，点击图标打开<strong>设置</strong>。
 3. 第一次体验可以直接使用默认按键，也可以先修改按键和轮盘布局。
 4. 按住触发键，把鼠标拖到目标扇区后松开即可执行。中心区域松开、点击右键或按 <strong>Esc</strong> 都可以取消。
@@ -117,7 +119,7 @@ lolPing-moyudazi 保留了游戏里“按住、拖动、松开”的爽快节奏
 
 ## 安装
 
-Windows 安装包位于 <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.0">0.6.0 Release 页面</a>。安装包没有代码签名，Windows SmartScreen 可能需要点击<strong>更多信息 → 仍要运行</strong>。
+Windows 安装包位于 <a href="https://github.com/DreamingBetter/lolPing-moyudazi/releases/tag/v0.6.1">0.6.1 Release 页面</a>。安装包没有代码签名，Windows SmartScreen 可能需要点击<strong>更多信息 → 仍要运行</strong>。
 
 ## 从源码构建
 
@@ -140,7 +142,7 @@ npm run dist
 
 ## 致谢与二次开发说明
 
-lolPing-moyudazi 0.6.0 是基于 <a href="https://github.com/darrenprx/lolPing">darrenprx/lolPing</a> 进行的 Windows 方向二次开发。我们站在原项目的架构、输入模型和轮盘渲染方案之上，加入了动作轮盘、房间聊天室、消息弹幕、英雄联盟指针皮肤和心之钢玩法。感谢原作者的设计与实现，也欢迎大家访问原项目、阅读其文档，并为原作者的项目点一个 Star：
+lolPing-moyudazi 是基于 <a href="https://github.com/darrenprx/lolPing">darrenprx/lolPing</a> 进行的 Windows 方向二次开发。我们站在原项目的架构、输入模型和轮盘渲染方案之上，加入了动作轮盘、房间聊天室、消息弹幕、英雄联盟指针皮肤和心之钢玩法。感谢原作者的设计与实现，也欢迎大家访问原项目、阅读其文档，并为原作者的项目点一个 Star：
 
 <strong>原项目：</strong> <a href="https://github.com/darrenprx/lolPing">https://github.com/darrenprx/lolPing</a>
 

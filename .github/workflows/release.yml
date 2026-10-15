@@ -9,7 +9,7 @@ on:
       tag:
         description: Release tag to build
         required: true
-        default: v0.6.0
+        default: v0.6.1
 
 env:
   RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -49,6 +49,9 @@ jobs:
       - run: npm run test:helper
       - run: npm test
       - run: npm run dist
+      - name: Verify Heartsteel sound in Windows build
+        shell: bash
+        run: test -f out/renderer/sounds/heartsteel.mp3
       - name: Upload the installer and its update files
         shell: bash
         env:
