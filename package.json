@@ -3,7 +3,7 @@
   "productName": "lolPing-摸鱼搭子",
   "version": "0.6.0",
   "private": true,
-  "description": "League of Legends style desktop wheels and shortcuts for Windows",
+  "description": "lolPing-moyudazi (lolPing-摸鱼搭子) is a Windows desktop app with League-style wheels, shortcuts, room chat, danmaku, cursor skins, and Heartsteel.",
   "author": "DreamingBetter",
   "license": "MIT",
   "homepage": "https://github.com/DreamingBetter/lolPing-moyudazi#readme",
