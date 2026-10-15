@@ -1,14 +1,15 @@
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  CursorSkinService, DEFAULT_AERO_CURSOR_VALUES, SUMMONER_CLASSIC_CURSOR_FILES, SUMMONER_CURSOR_FILES, type CursorSkinDeps,
+  CURSOR_ROLES, CursorSkinService, DEFAULT_AERO_CURSOR_VALUES, SUMMONER_CLASSIC_CURSOR_FILES, SUMMONER_CURSOR_FILES, type CursorSkinDeps,
 } from '../../src/main/cursorSkin';
 
 const sourceDir = 'C:\\bundle\\cursors\\summoner';
 const classicSourceDir = 'C:\\bundle\\cursors\\summoner-classic';
-const installDir = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing\\cursors\\summoner';
-const classicInstallDir = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing\\cursors\\summoner-classic';
-const backupFile = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing\\cursor-backup.json';
+const installDir = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing-moyudazi\\cursors\\summoner';
+const classicInstallDir = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing-moyudazi\\cursors\\summoner-classic';
+const backupFile = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing-moyudazi\\cursor-backup.json';
+const legacyBackupFile = 'C:\\Users\\Player\\AppData\\Roaming\\lolPing\\cursor-backup.json';
 
 const currentValues = {
   Arrow: 'C:\\Windows\\cursors\\aero_arrow.cur',
@@ -118,6 +119,96 @@ describe('CursorSkinService', () => {
     expect(registryScript()).toContain(currentValues.Arrow);
     expect(registryScript()).toContain(currentValues.Hand);
     expect(deps.removeFile).toHaveBeenCalledWith(backupFile);
+  });
+
+  it('restores Windows defaults when a previous lolPing cursor scheme was backed up', async () => {
+    const legacyDir = join('C:\\Users\\Player\\AppData\\Roaming', 'lolPing', 'cursors', 'summoner-classic');
+    const brandedValues = Object.fromEntries(CURSOR_ROLES.map((role) => [
+      role, SUMMONER_CLASSIC_CURSOR_FILES[role] ? join(legacyDir, SUMMONER_CLASSIC_CURSOR_FILES[role]) : '',
+    ]));
+    existing.add(backupFile);
+    files.set(backupFile, JSON.stringify({ version: 1, values: brandedValues }));
+
+    await expect(service().restoreOriginal()).resolves.toEqual({ ok: true });
+
+    expect(registryScript()).toContain(DEFAULT_AERO_CURSOR_VALUES.Arrow);
+    expect(registryScript()).not.toContain(join(legacyDir, 'normal.cur'));
+    expect(existing.has(backupFile)).toBe(false);
+  });
+
+  it('restores Windows defaults when a mostly Summoner backup has one changed cursor', async () => {
+    const legacyDir = join('C:\\Users\\Player\\AppData\\Roaming', 'lolPing', 'cursors', 'summoner-classic');
+    const brandedValues = Object.fromEntries(CURSOR_ROLES.map((role) => [
+      role, SUMMONER_CLASSIC_CURSOR_FILES[role] ? join(legacyDir, SUMMONER_CLASSIC_CURSOR_FILES[role]) : '',
+    ]));
+    brandedValues.Hand = 'C:\\My cursors\\hand.cur';
+    existing.add(backupFile);
+    const originalText = JSON.stringify({ version: 1, values: brandedValues });
+    files.set(backupFile, originalText);
+
+    await expect(service().restoreOriginal()).resolves.toEqual({ ok: true });
+
+    expect(registryScript()).toContain(DEFAULT_AERO_CURSOR_VALUES.Arrow);
+    expect(files.get(`${backupFile}.branded`)).toBe(originalText);
+    expect(existing.has(backupFile)).toBe(false);
+  });
+
+  it('preserves a custom original scheme that reuses one Summoner cursor', async () => {
+    const mixedValues = { ...currentValues, Arrow: join(installDir, 'normal.cur') };
+    existing.add(backupFile);
+    files.set(backupFile, JSON.stringify({ version: 1, values: mixedValues }));
+
+    await expect(service().restoreOriginal()).resolves.toEqual({ ok: true });
+
+    expect(registryScript()).toContain(`-Name 'Arrow' -Value '${mixedValues.Arrow}'`);
+    expect(registryScript()).toContain(`-Name 'Hand' -Value '${mixedValues.Hand}'`);
+  });
+
+  it('recovers the original scheme from the previous app backup before using Windows defaults', async () => {
+    const legacyDir = join('C:\\Users\\Player\\AppData\\Roaming', 'lolPing', 'cursors', 'summoner-classic');
+    const brandedValues = Object.fromEntries(CURSOR_ROLES.map((role) => [
+      role, SUMMONER_CLASSIC_CURSOR_FILES[role] ? join(legacyDir, SUMMONER_CLASSIC_CURSOR_FILES[role]) : '',
+    ]));
+    const originalValues = { ...currentValues, Arrow: 'C:\\My cursors\\arrow.cur', Hand: 'C:\\My cursors\\hand.cur' };
+    existing.add(backupFile);
+    files.set(backupFile, JSON.stringify({ version: 1, values: brandedValues }));
+    existing.add(legacyBackupFile);
+    files.set(legacyBackupFile, JSON.stringify({ version: 1, values: originalValues }));
+
+    await expect(service().restoreOriginal()).resolves.toEqual({ ok: true });
+
+    expect(registryScript()).toContain(`-Name 'Arrow' -Value '${originalValues.Arrow}'`);
+    expect(registryScript()).toContain(`-Name 'Hand' -Value '${originalValues.Hand}'`);
+    expect(existing.has(backupFile)).toBe(false);
+    expect(existing.has(legacyBackupFile)).toBe(true);
+  });
+
+  it('restores Windows defaults and saves an unreadable backup aside', async () => {
+    const unreadable = '{"version":1,"values":';
+    existing.add(backupFile);
+    files.set(backupFile, unreadable);
+
+    await expect(service().restoreOriginal()).resolves.toEqual({ ok: true });
+
+    expect(registryScript()).toContain(DEFAULT_AERO_CURSOR_VALUES.Arrow);
+    expect(files.get(`${backupFile}.invalid`)).toBe(unreadable);
+    expect(existing.has(backupFile)).toBe(false);
+  });
+
+  it('does not save the active Summoner scheme as the original when applying after a restart', async () => {
+    const brandedValues = Object.fromEntries(CURSOR_ROLES.map((role) => [
+      role, SUMMONER_CURSOR_FILES[role] ? join(installDir, SUMMONER_CURSOR_FILES[role]) : '',
+    ]));
+    vi.mocked(deps.execFile).mockResolvedValue({ stdout: JSON.stringify(brandedValues) });
+
+    await expect(service().applySummoner()).resolves.toEqual({ ok: true });
+    const backup = JSON.parse(files.get(backupFile) ?? '{}');
+    expect(backup.values.Arrow).toBe(DEFAULT_AERO_CURSOR_VALUES.Arrow);
+
+    await expect(service().restoreOriginal()).resolves.toEqual({ ok: true });
+    const writes = scripts().filter((script) => script.includes('Set-ItemProperty'));
+    expect(writes.at(-1)).toContain(DEFAULT_AERO_CURSOR_VALUES.Arrow);
+    expect(writes.at(-1)).not.toContain(join(installDir, 'normal.cur'));
   });
 
   it('falls back to the Windows Aero cursor scheme when the backup is missing', async () => {
