@@ -20,7 +20,7 @@ export function pruneAssets(): Plugin {
     closeBundle() {
       const keep: Record<string, Set<string>> = {
         textures: new Set(allTextureNames().map((n) => `${n}.png`)),
-        sounds: new Set(allSoundNames().map((n) => `${n}.wav`)),
+        sounds: new Set([...allSoundNames().map((n) => `${n}.wav`), 'heartsteel.mp3']),
         emotes: new Set(allEmoteAssetFiles().map((f) => f.slice('emotes/'.length))),
       };
       for (const [dir, names] of Object.entries(keep)) {
