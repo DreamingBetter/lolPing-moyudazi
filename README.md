@@ -144,6 +144,8 @@ npm test
 npm run dist
 ~~~
 
+For a local preview, run `npm run dist` in the repository's main directory. Open `release/win-unpacked/lolPing-摸鱼搭子.exe` from inside its folder to try the packaged app directly, or use `release/lolPing-moyudazi-Setup-<version>.exe` to test installation. These local files are generated on your machine and are separate from the installer on the GitHub release page.
+
 ## Credits and attribution
 
 lolPing-moyudazi is a Windows-focused second development based on <a href="https://github.com/darrenprx/lolPing">darrenprx/lolPing</a>. We are building on the original project's architecture, input model, and wheel renderer while adding the action wheel, room chat, danmaku, cursor skins, and Heartsteel mode described above. Please visit the original project, read its documentation, and consider giving the original author a star:
