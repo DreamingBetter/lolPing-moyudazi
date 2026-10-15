@@ -74,9 +74,9 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Keep settings normalized and versioned in shared code; validate anything user-editable.
 - Keep global input capture conservative so normal desktop interactions are not hijacked unexpectedly.
 - Add focused tests for settings normalization, wheel/action selection, and main-process action execution.
-- Default ongoing development should happen in one long-lived integration worktree and branch instead of creating a fresh branch/worktree for every small task. Use `.worktrees/develop` on `develop` unless the user asks otherwise.
-- Multiple Codex sessions may work on that same branch for this solo project, but each session must run `git status --short --branch` before editing, avoid concurrently editing the same files, preserve dirty changes it did not make, and commit completed slices frequently.
-- Create a separate branch/worktree only for risky experiments, release isolation, or work that is likely to conflict heavily. Delete stale worktrees/branches after confirming their changes are merged or intentionally abandoned.
+- Do all ongoing development in the repository's main directory on the `main` branch. Do not recreate `.worktrees/develop`, use a `develop` branch, or create another worktree unless the user explicitly requests it.
+- Multiple Codex sessions may work in this main directory, but each session must run `git status --short --branch` before editing, avoid concurrently editing the same files, preserve dirty changes it did not make, and commit completed slices frequently.
+- Before pulling, merging, or releasing, inspect the current `main` status and reconcile any local changes there. Keep the working directory and GitHub's `main` branch aligned so version and release work is visible in the same place as development.
 - After each development round, provide a way for the user to see the result. Prefer `npm run dev` for fast iteration; use `npm run dist` when the user needs an installer or release-style testing. The installer name follows the current version: `release/lolPing-moyudazi-Setup-${version}.exe`.
 - `npm run dist` builds the Windows installer. The script uses `tools/build-win.mjs`, which points electron-builder at the already-installed `node_modules/electron/dist` and defaults `ELECTRON_BUILDER_BINARIES_MIRROR` to the npmmirror electron-builder-binaries mirror when no mirror is already configured. This avoids two common local Windows issues: hanging while unpacking Electron from the default cache and timing out while downloading NSIS from GitHub.
 - On Windows dev machines where an installed lolPing instance has already used `%APPDATA%\lolPing`, start development with a separate Electron user-data directory to avoid cache and single-instance-lock conflicts:
@@ -99,5 +99,5 @@ Cursor skin assets:
 
 Heartsteel assets:
 
-- The user provided `D:\cc_workspace\lolping\assets\心之钢效果参考图.png`, `D:\cc_workspace\lolping\assets\心之钢装备图.png`, and `D:\cc_workspace\lolping\assets\sounds\心之钢音效.mp3`. Copy them into the active develop worktree before implementation.
+- The provided reference images and original Chinese-named audio are in `assets/`. The app loads `assets/sounds/heartsteel.mp3`; keep that ASCII-named file in place when editing or packaging the Heartsteel sound. The Chinese-named audio is an identical source copy and is not the runtime path.
 - Recreate the Heartsteel target effect from the reference image with CSS/Canvas rather than using the tiny reference image directly as the visible target.
