@@ -28,39 +28,39 @@
 
 <p align="center"><img src="docs/media/demo.gif" width="920" alt="lolPing-moyudazi wheel interaction demo"></p>
 
-## Why try lolPing-moyudazi? 🎮
+## 🎮 Why try lolPing-moyudazi?
 
 lolPing-moyudazi keeps the satisfying hold-and-drag rhythm of an in-game wheel and gives it a place on your whole desktop. It is useful when a normal shortcut feels too hidden, and fun when a routine action deserves a little more personality.
 
-- **For work ⚡:** take a screenshot, mute a meeting, change volume, show the desktop, or lock Windows with one short gesture.
+- ⚡ **For work:** take a screenshot, mute a meeting, change volume, show the desktop, or lock Windows with one short gesture.
 - **For everyday shortcuts:** keep a favourite website, app, file, or folder one drag away instead of searching through menus.
-- **For friends 💬:** create a room, send pings and emotes, chat in plain text, and let messages float across the desktop as danmaku.
-- **For atmosphere 🖱️:** switch between the modern Summoner cursor, the classic League cursor, and your normal Windows cursor.
-- **For a break ❤️‍🔥:** start Heartsteel alone or invite the room to race for targets and grow your maximum health.
+- 💬 **For friends:** create a room, send pings and emotes, chat in plain text, and let messages float across the desktop as danmaku.
+- 🖱️ **For atmosphere:** switch between the modern Summoner cursor, the classic League cursor, and your normal Windows cursor.
+- ❤️‍🔥 **For a break:** start Heartsteel alone or invite the room to race for targets and grow your maximum health.
 
-## What is new in 0.6.0 ✨
+## ✨ What is new in 0.6.0
 
 Version 0.6.0 keeps the original ping and emote wheels and adds a second wheel for desktop actions, plus social, cosmetic, and light entertainment features.
 
-### Action wheel ⚡: make desktop work feel like a quick play
+### ⚡ Action wheel: make desktop work feel like a quick play
 
 Hold **Shift** and drag to open the default action wheel. Release on a slice to open the Windows snipping flow, mute or change volume, show the desktop, lock the screen, open your browser, or launch a configured website. You can replace all eight slots from the built-in library and edit each slot's label, URL, app path, file path, folder path, or volume step.
 
 <p align="center"><img src="docs/media/action-wheel-0.6.0.png" width="920" alt="lolPing-moyudazi action wheel editor and built-in action library"></p>
 
-### Room chat and danmaku 💬: stay in the same room between matches
+### 💬 Room chat and danmaku: stay in the same room between matches
 
 Create a room, share its code, and invite friends on the same network or through an internet connection. Room messages are end-to-end encrypted, plain text, and kept in memory while people remain in the room. Turn on danmaku when you want the conversation to appear as a live desktop overlay; choose its display area, speed, font size, and opacity to fit your screen.
 
 <p align="center"><img src="docs/media/chat-danmaku-0.6.0.png" width="920" alt="lolPing-moyudazi room chat and danmaku settings"></p>
 
-### League cursor skins 🖱️: change the feel of the whole desktop
+### 🖱️ League cursor skins: change the feel of the whole desktop
 
 Choose the system cursor, the modern Summoner cursor, or the classic League cursor pack. Disable the feature at any time and lolPing-moyudazi restores the Windows cursor scheme that was in use before.
 
 <p align="center"><img src="docs/media/cursor-skins-0.6.0.png" width="700" alt="lolPing-moyudazi system, modern, and classic cursor choices"></p>
 
-### Heartsteel ❤️‍🔥: open it anytime without launching the game
+### ❤️‍🔥 Heartsteel: open it anytime without launching the game
 
 No game launch is required: start Heartsteel directly from the room settings whenever you want a quick break. Targets appear on the desktop and can be claimed with a right-click before they disappear. A successful hit permanently adds maximum health to the winner. Play solo on your own desktop, or turn it into a room race where everyone sees the same target and the hit result. Pick a relaxed, normal, or fast target pace and keep your health and stacks visible in a draggable desktop widget.
 
@@ -83,7 +83,7 @@ The default gestures are:
 
 Press **Ctrl + Alt + P** to pause or resume input capture. Click the tray icon whenever you want to change settings.
 
-## Try these first 🎯
+## 🎯 Try these first
 
 ### A three-gesture work flow
 
@@ -101,7 +101,7 @@ Once that feels natural, replace a slot with a website, app, file, or folder you
 4. Open **Room chat** for text messages, then enable **Chat danmaku** if you want the conversation on screen.
 5. Use the room controls to mute the room, limit incoming pings, or leave when you are done.
 
-### A Heartsteel break ❤️‍🔥
+### ❤️‍🔥 A Heartsteel break
 
 1. Start Heartsteel from **Settings → Room** without opening the game. It can run solo, or as a shared race while you are in a room.
 2. Watch for the desktop target and right-click it before it expires.
