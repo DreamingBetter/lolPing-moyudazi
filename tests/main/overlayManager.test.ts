@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EMOTE_DURATION_S, type EmoteArt } from '../../src/shared/emotes';
+import type { EmoteArt } from '../../src/shared/emotes';
 import { OVERLAY_ACTIONED, OVERLAY_EMOTED, OVERLAY_HEARTSTEEL_CLAIM, OVERLAY_PINGED } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
     webContents: { send: ReturnType<typeof vi.fn> };
     setShape: ReturnType<typeof vi.fn>;
     setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
+    page?: string;
   }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
 }));
@@ -21,6 +22,7 @@ vi.mock('electron', async () => {
       return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
     }
     x: number;
+    page?: string;
     destroyed = false;
     webContents = Object.assign(new Emitter(), { send: vi.fn() });
     setShape = vi.fn();
@@ -56,7 +58,7 @@ vi.mock('electron', async () => {
 
 vi.mock('../../src/main/paths', () => ({
   IS_MAC: false,
-  loadPage: () => Promise.resolve(),
+  loadPage: (win: { page?: string }, page: string) => { win.page = page; return Promise.resolve(); },
   preloadPath: () => 'preload.js',
 }));
 
@@ -226,134 +228,86 @@ describe('OverlayManager chat danmaku', () => {
 });
 
 describe('OverlayManager Heartsteel targets', () => {
+  it('keeps target clicks active while a ping or emote renders across the full display', () => {
+    expect(h.windows).toHaveLength(4);
+    const visual = h.windows[0];
+    const hit = h.windows[2];
+    expect(visual.page).toBe('overlay');
+    expect(hit.page).toBe('heartsteel-hit');
+    mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5000, cursor: 'modern' });
+
+    mgr.spawnRemote({ displayId: 1, x: 320, y: 240, id: 'danger', tag: { name: 'Bob', color: 2 } });
+    expect(visual.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+    expect(visual.setShape).not.toHaveBeenCalled();
+    expect(hit.setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
+    expect(hit.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+
+    mgr.spawnRemoteEmote({ displayId: 1, x: 330, y: 250, ref: 'gg_heart', peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
+    expect(hit.setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
+    expect(hit.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+  });
+
   it('shows a target, opens only a small hit shape, and clears it back to click-through', () => {
     mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
     expect(sent(0)).toEqual([['heartsteel:target', { id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' }]]);
-    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
-    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
+    expect(h.windows[2].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+    expect(h.windows[2].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
+    expect(h.windows[2].webContents.send).toHaveBeenLastCalledWith('heartsteel:target', {
+      id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern',
+    });
 
     mgr.clearHeartsteelTarget('1'.repeat(32));
     expect(sent(0).at(-1)).toEqual(['heartsteel:clear', { id: '1'.repeat(32) }]);
-    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
-    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+    expect(h.windows[2].setShape).toHaveBeenLastCalledWith([]);
+    expect(h.windows[2].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
   });
 
   it('keeps hit shapes for multiple Heartsteel targets on the same display', () => {
     mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
     mgr.showHeartsteelTarget({ displayId: 1, id: '2'.repeat(32), x: 300, y: 400, expiresAt: 6, cursor: 'modern' });
 
-    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([
+    expect(h.windows[2].setShape).toHaveBeenLastCalledWith([
       { x: 52, y: 152, width: 96, height: 96 },
       { x: 252, y: 352, width: 96, height: 96 },
     ]);
     mgr.clearHeartsteelTarget('1'.repeat(32));
-    expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 252, y: 352, width: 96, height: 96 }]);
-    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+    expect(h.windows[2].setShape).toHaveBeenLastCalledWith([{ x: 252, y: 352, width: 96, height: 96 }]);
+    expect(h.windows[2].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
   });
 
-  it('suspends Heartsteel hit shapes while a wheel effect renders full-screen', () => {
-    vi.useFakeTimers();
-    try {
-      mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
-      mgr.handle({ type: 'wheelOpen', x: 500, y: 500, wheel: 'ping' });
+  it('restores target clicks as soon as a wheel is released', () => {
+    mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5000, cursor: 'modern' });
+    mgr.handle({ type: 'wheelOpen', x: 500, y: 500, wheel: 'ping' });
+    expect(h.windows[2].setShape).toHaveBeenLastCalledWith([]);
+    expect(h.windows[2].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
 
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-      expect(sent(0).at(-1)).toEqual(['wheel:open', { x: 500, y: 500, wheel: 'ping' }]);
-
-      mgr.handle({ type: 'wheelRelease', x: 560, y: 540, wheel: 'ping' });
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-
-      vi.advanceTimersByTime(DEFAULT_SETTINGS.pingDurationS * 1000 + 500);
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
-    } finally {
-      vi.useRealTimers();
-    }
+    mgr.handle({ type: 'wheelRelease', x: 560, y: 540, wheel: 'ping' });
+    expect(h.windows[2].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
+    expect(h.windows[2].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
   });
 
-  it('temporarily opens the full overlay when a remote ping renders over Heartsteel targets', () => {
-    vi.useFakeTimers();
-    try {
-      mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
-      h.windows[0].setShape.mockClear();
+  it('keeps remaining targets clickable while Heartsteel hit feedback renders', () => {
+    mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5000, cursor: 'modern' });
+    mgr.showHeartsteelTarget({ displayId: 1, id: '2'.repeat(32), x: 300, y: 400, expiresAt: 6000, cursor: 'modern' });
 
-      mgr.spawnRemote({ displayId: 1, x: 320, y: 240, id: 'danger', tag: { name: 'Bob', color: 2 } });
+    mgr.showHeartsteelHit({
+      displayId: 1, id: '1'.repeat(32), x: 100, y: 200,
+      winnerName: 'Alex', winnerColor: 2, damage: 185, bonusGain: 19,
+    });
+    mgr.clearHeartsteelTarget('1'.repeat(32));
 
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-      expect(sent(0).at(-1)).toEqual(['ping:spawn', { id: 'danger', x: 320, y: 240, tag: { name: 'Bob', color: 2 } }]);
-
-      vi.advanceTimersByTime(DEFAULT_SETTINGS.pingDurationS * 1000 + 500);
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('temporarily opens the full overlay when a remote emote renders over Heartsteel targets', () => {
-    vi.useFakeTimers();
-    try {
-      mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
-      h.windows[0].setShape.mockClear();
-
-      mgr.spawnRemoteEmote({ displayId: 1, x: 320, y: 240, ref: 'gg_heart', peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
-
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-      expect(sent(0).at(-1)).toEqual([
-        'emote:spawn',
-        { owner: 'peer-1', art: art('gg_heart', true), x: 320, y: 240, tag: { name: 'Bob', color: 2 } },
-      ]);
-
-      vi.advanceTimersByTime(EMOTE_DURATION_S * 1000 + 500);
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 52, y: 152, width: 96, height: 96 }]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('keeps the full overlay open long enough for Heartsteel hit feedback before restoring remaining targets', () => {
-    vi.useFakeTimers();
-    try {
-      mgr.showHeartsteelTarget({ displayId: 1, id: '1'.repeat(32), x: 100, y: 200, expiresAt: 5, cursor: 'modern' });
-      mgr.showHeartsteelTarget({ displayId: 1, id: '2'.repeat(32), x: 300, y: 400, expiresAt: 6, cursor: 'modern' });
-      h.windows[0].setShape.mockClear();
-
-      mgr.showHeartsteelHit({
-        displayId: 1,
-        id: '1'.repeat(32),
-        x: 100,
-        y: 200,
-        winnerName: 'Alex',
-        winnerColor: 2,
-        damage: 185,
-        bonusGain: 19,
-      });
-      mgr.clearHeartsteelTarget('1'.repeat(32));
-
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
-      expect(sent(0).at(-2)).toEqual([
-        'heartsteel:hit',
-        { id: '1'.repeat(32), x: 100, y: 200, winnerName: 'Alex', winnerColor: 2, damage: 185, bonusGain: 19 },
-      ]);
-
-      vi.advanceTimersByTime(2000);
-      expect(h.windows[0].setShape).toHaveBeenLastCalledWith([{ x: 252, y: 352, width: 96, height: 96 }]);
-      expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(sent(0).at(-2)).toEqual([
+      'heartsteel:hit',
+      { id: '1'.repeat(32), x: 100, y: 200, winnerName: 'Alex', winnerColor: 2, damage: 185, bonusGain: 19 },
+    ]);
+    expect(h.windows[2].setShape).toHaveBeenLastCalledWith([{ x: 252, y: 352, width: 96, height: 96 }]);
+    expect(h.windows[2].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
   });
 
   it('emits a Heartsteel claim report from the target display', () => {
     const claim = vi.fn();
     mgr.on('heartsteelClaim', claim);
-    h.handlers.get(OVERLAY_HEARTSTEEL_CLAIM)!({ sender: h.windows[1].webContents }, { id: '2'.repeat(32), x: 10, y: 20 });
+    h.handlers.get(OVERLAY_HEARTSTEEL_CLAIM)!({ sender: h.windows[3].webContents }, { id: '2'.repeat(32), x: 10, y: 20 });
     expect(claim).toHaveBeenCalledWith({ id: '2'.repeat(32), displayId: 2, x: 10, y: 20 });
   });
 });

@@ -4,7 +4,7 @@ import { APP_DATA_DIR_NAME } from '../shared/branding';
 import { platformOf, type Platform } from '../shared/platform';
 import { APP_SCHEME } from './appProtocol';
 
-export type Page = 'overlay' | 'settings' | 'heartsteel-widget';
+export type Page = 'overlay' | 'heartsteel-hit' | 'settings' | 'heartsteel-widget';
 export type PreloadPage = 'overlay' | 'settings';
 
 export const PLATFORM: Platform = platformOf(process.platform);

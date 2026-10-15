@@ -28,6 +28,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           overlay: resolve('src/renderer/overlay/index.html'),
+          'heartsteel-hit': resolve('src/renderer/heartsteel-hit/index.html'),
           settings: resolve('src/renderer/settings/index.html'),
           'heartsteel-widget': resolve('src/renderer/heartsteel-widget/index.html'),
         },

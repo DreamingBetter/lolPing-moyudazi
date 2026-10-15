@@ -65,6 +65,7 @@ The planned second-development direction is to evolve the wheel from a game-styl
 - Heartsteel hit math is integer based: damage is `Math.round(125 + maxHealth * 0.06)`, bonus gain is `Math.round(damage * 0.1)`, and no other player's health is reduced.
 - Heartsteel target scheduling should not introduce a room-owner concept. Elect the active member with the lowest peer id as the temporary scheduler. Clickers send target claims, and only the scheduler broadcasts the final hit so all clients converge on one winner.
 - Heartsteel desktop targets should use conservative overlay hit testing. Keep normal desktop interaction click-through outside the active target, preferably with Windows `BrowserWindow.setShape()` around the target hit area.
+- Keep Heartsteel target clicks in a separate shaped transparent window from the full-screen visual overlay. Ping and emote effects must leave active targets clickable; a wheel may suspend target clicks only until release or cancel.
 - Heartsteel health bars represent current health, not growth progress. Current health is full by default, so render the bar filled in green. Use LoL-like density cues: small ticks represent 100 max health and heavier ticks represent 1000 max health, so ticks become denser as max health grows.
 
 ## Development Habits
